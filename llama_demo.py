@@ -123,8 +123,7 @@ def parse_args() -> argparse.Namespace:
         "-p",
         type=str,
         default=(
-            "Write me a story where Minecraft Herobrine fights Dr. Eggman. "
-            "You must decide a victor."
+            "Hi! Who are you?"
         ),
         help="Prompt to send to the model.",
     )

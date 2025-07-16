@@ -17,10 +17,88 @@ from datetime import datetime
 import threading
 from tkinter import ttk
 import traceback
+import sys
+import time
+import contextlib
 
 # Configure CustomTkinter
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
+
+# Helper utilities from llama_demo.py
+def logical_cores() -> int:
+    """Return logical core count; always ≥ 1."""
+    return max(1, os.cpu_count() or 1)
+
+def default_threads() -> int:
+    """Half the logical cores, minimum 1."""
+    return max(1, logical_cores() // 2)
+
+@contextlib.contextmanager
+def suppress_stderr():
+    """Temporarily suppress stderr output."""
+    with open(os.devnull, "w") as devnull:
+        old_stderr = sys.stderr
+        sys.stderr = devnull
+        try:
+            yield
+        finally:
+            sys.stderr = old_stderr
+
+PROMPT_TEMPLATE = """You are an expert municipal analyst responsible for creating agenda summaries for the City Council. Your task is to take a list of agenda items for a specific meeting date and format them into a clear, concise report.
+
+Follow these rules strictly:
+
+The output must be raw text only. Do not use any markdown like '##' or '**'.
+The report for the date must start with the date itself, followed by any notes in parentheses if available. Example: "June 23: (Sue remote, Christine will Chair)"
+The report must contain these four sections in this exact order:
+Closed Session:
+Special Presentations:
+Consent:
+Consideration or Public Hearing:
+Under each section, list the relevant summarized agenda items as bullet points starting with "- ".
+If a section has no items, write "TBD" after the section name. Example: "Closed Session: TBD"
+Summarize each agenda item concisely based on its title and notes. Focus on the core action or topic.
+Here are some examples of the desired output format:
+
+Example 1:
+
+June 23: (Sue remote, Christine will Chair)
+Closed Session: TBD
+Special Presentations:
+- Parks Make Life Better Month
+Consent:
+- Childcare site lease agreement with Pacifica School District
+- New Operating Agreement with PRC for TSPP
+- Design Services Agreement for FY26-27 Pavement Resurfacing Project
+- Recertification of Sewer System Management Plan (State law requirement)
+Consideration or Public Hearing:
+- FY 2025-26 Budget Adoption
+- Annual position vacancy, recruitment and retention report (State law requirement AB2561)
+- Introduction of Ordinance Changing Council Meeting start-time and formal adoption of other Governance Training outcomes
+Example 2:
+
+July 14: (Sue not attending, Christine will Chair)
+Closed Session: TBD
+Special Presentations:
+- Joann Arnos, OSPAC Years of Service
+Consent:
+- Annual POs/Agreements over $75K PWD-Wastewater
+- Labor MOUs (placeholder)
+- Sewer service charges for FY2025-26 (last year of approved 5-year schedule)
+- VRBO Voluntary Collection Agreement (placeholder) - Move to future agenda
+Consideration or Public Hearing:
+- STR Ordinance Update Introduction
+- Continued Consideration of Climate Action and Resilience Plan Adoption
+Now, generate a report for the following meeting date based on the items provided below.
+
+Meeting Date: {meeting_date}
+
+Agenda Items:
+{items_text}
+
+Report:
+"""
 
 # Required CSV headers
 REQUIRED_HEADERS = [
@@ -61,6 +139,8 @@ class AgendaSummaryGenerator(ctk.CTk):
         self.filtered_items = []
         self.selected_items = {}
         self.llm_model = None
+        self.generated_report_text = ""
+        self.meeting_dates_for_report = []
         
         # Create main container
         self.main_container = ctk.CTkFrame(self, fg_color=self.bg_color)
@@ -205,6 +285,50 @@ class AgendaSummaryGenerator(ctk.CTk):
         # Review state container (initially hidden)
         self.review_state = ctk.CTkFrame(home_frame, fg_color=self.bg_color)
         
+        # Generation state container (initially hidden)
+        self.generation_state = ctk.CTkFrame(home_frame, fg_color=self.bg_color)
+        self.create_generation_state_widgets()
+        
+    def create_generation_state_widgets(self):
+        """Create the UI for the report generation state"""
+        # Top control bar
+        control_bar = ctk.CTkFrame(self.generation_state, fg_color=self.bg_color, height=60)
+        control_bar.pack(fill="x", pady=(0, 20))
+        control_bar.pack_propagate(False)
+        
+        # Title
+        title_label = ctk.CTkLabel(
+            control_bar,
+            text="Generating Report...",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=self.text_color
+        )
+        title_label.pack(side="left", padx=20)
+        
+        # Save button (initially disabled)
+        self.save_btn = ctk.CTkButton(
+            control_bar,
+            text="Save Report",
+            width=150,
+            height=40,
+            fg_color=self.primary_color,
+            hover_color=self.accent_color,
+            font=ctk.CTkFont(size=16),
+            command=self.save_generated_report,
+            state="disabled"
+        )
+        self.save_btn.pack(side="right", padx=20)
+        
+        # Text box for streaming output
+        self.generation_textbox = ctk.CTkTextbox(
+            self.generation_state,
+            fg_color="white",
+            text_color=self.text_color,
+            font=ctk.CTkFont(family="monospace", size=12),
+            wrap="word"
+        )
+        self.generation_textbox.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+
     def create_review_state(self):
         """Create the review state UI"""
         # Clear existing content
@@ -399,7 +523,7 @@ Project Organization & Coordination:
 Madeleine Hur
 
 Acknowledgements:
-This application utilizes the Gemma-2B-It language model from Google and the llama-cpp-python library.
+This application utilizes open-source Large Language Models, defaulting to Gemma-3n-E2B from Google, and the llama-cpp-python library.
 All logos and trademarks are the property of their respective owners."""
         
         credits_label = ctk.CTkLabel(
@@ -484,14 +608,16 @@ All logos and trademarks are the property of their respective owners."""
         """Load the LLM model in background"""
         def load_model():
             try:
-                model_path = "gemma-2b-it.gguf"
+                model_path = "language_models/gemma-3n-E2B-it-Q8_0.gguf"
                 if os.path.exists(model_path):
-                    self.llm_model = Llama(
-                        model_path=model_path,
-                        n_ctx=2048,
-                        n_threads=4,
-                        n_gpu_layers=0
-                    )
+                    with suppress_stderr():
+                        self.llm_model = Llama(
+                            model_path=model_path,
+                            chat_format="gemma",
+                            n_ctx=8192,
+                            n_threads=default_threads(),
+                            verbose=False,
+                        )
             except Exception as e:
                 print(f"Failed to load LLM model: {e}")
                 
@@ -512,6 +638,12 @@ All logos and trademarks are the property of their respective owners."""
             )
             return
             
+        # Switch to generation view
+        self.review_state.pack_forget()
+        self.generation_state.pack(fill="both", expand=True)
+        self.generation_textbox.delete("1.0", "end")
+        self.save_btn.configure(state="disabled")
+        
         # Disable generate button
         self.generate_btn.configure(text="Generating...", state="disabled")
         
@@ -523,90 +655,101 @@ All logos and trademarks are the property of their respective owners."""
         ).start()
         
     def _generate_report_thread(self, selected_data):
-        """Background thread for report generation"""
+        """Background thread for report generation using streaming."""
         try:
-            # Group items by meeting date and section
-            grouped_items = {}
+            self.generated_report_text = ""
+            
+            # Group items by meeting date
+            grouped_by_date = {}
             for item in selected_data:
                 date = item['MEETING DATE']
-                section = item.get('AGENDA SECTION', 'Unknown Section')
-                
-                if date not in grouped_items:
-                    grouped_items[date] = {}
-                if section not in grouped_items[date]:
-                    grouped_items[date][section] = []
-                    
-                grouped_items[date][section].append(item)
-                
-            # Generate summaries
-            all_summaries = []
-            meeting_dates = []
+                if date not in grouped_by_date:
+                    grouped_by_date[date] = []
+                grouped_by_date[date].append(item)
             
-            for date in sorted(grouped_items.keys()):
-                meeting_dates.append(date)
-                all_summaries.append(f"Meeting Date: {date}")
+            self.meeting_dates_for_report = sorted(grouped_by_date.keys())
+
+            if self.llm_model is None:
+                raise ConnectionError("LLM model is not loaded. Please wait or restart the application.")
+
+            # Process each date sequentially
+            for date in self.meeting_dates_for_report:
+                items = grouped_by_date[date]
+                items_text = ""
+                for item in items:
+                    section = item.get('AGENDA SECTION', 'N/A')
+                    agenda_item = item.get('AGENDA ITEM', 'N/A')
+                    notes = item.get('NOTES', 'No notes available')
+                    items_text += f"- Section: {section}, Item: \"{agenda_item}\", Notes: \"{notes}\"\n"
                 
-                for section in sorted(grouped_items[date].keys()):
-                    all_summaries.append(f"\n{section}:")
-                    
-                    for item in grouped_items[date][section]:
-                        summary = self.generate_llm_summary(item)
-                        all_summaries.append(f"• {summary}")
-                        
-                all_summaries.append("")  # Add spacing between dates
+                prompt = PROMPT_TEMPLATE.format(meeting_date=date, items_text=items_text.strip())
+
+                # Generate response with streaming
+                stream = self.llm_model.create_chat_completion(
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=2048,
+                    temperature=0.2,
+                    top_p=0.95,
+                    top_k=40,
+                    stream=True,
+                )
+
+                # Stream to GUI
+                for chunk in stream:
+                    token = chunk["choices"][0]["delta"].get("content", "")
+                    if token:
+                        self.generated_report_text += token
+                        self.after(0, self.update_generation_textbox, token)
                 
-            # Generate document
-            content = "\n".join(all_summaries)
-            doc = self.create_word_document(content, meeting_dates)
-            
-            # Save document (switch to main thread)
-            self.after(0, self._save_document, doc)
+                # Add newlines between reports for different dates
+                self.generated_report_text += "\n\n"
+                self.after(0, self.update_generation_textbox, "\n\n")
+
+            # Generation complete
+            self.after(0, self.generation_finished)
             
         except Exception as e:
             self.after(0, lambda: messagebox.showerror(
                 "Generation Error",
-                f"An error occurred while generating the report: {str(e)}"
+                f"An error occurred while generating the report: {str(e)}\n\n{traceback.format_exc()}"
+            ))
+            # Switch back to review view on error
+            self.after(0, lambda: (
+                self.generation_state.pack_forget(),
+                self.review_state.pack(fill="both", expand=True)
             ))
             
         finally:
-            # Re-enable button
+            # Re-enable original generate button
             self.after(0, lambda: self.generate_btn.configure(
                 text="Generate Report",
                 state="normal"
             ))
             
-    def generate_llm_summary(self, item):
-        """Generate summary for a single agenda item"""
-        if self.llm_model is None:
-            # Fallback if model not loaded
-            return f"{item['AGENDA ITEM']} - {item.get('NOTES', 'No notes available')}"
-            
+    def update_generation_textbox(self, token: str):
+        """Appends a token to the generation textbox. Must be called from the main thread."""
+        self.generation_textbox.insert("end", token)
+        self.generation_textbox.see("end")
+
+    def generation_finished(self):
+        """Called when the report generation is complete."""
+        self.save_btn.configure(state="normal")
+        messagebox.showinfo("Generation Complete", "The report has been generated. You can now review it and save the document.")
+
+    def save_generated_report(self):
+        """Creates and saves the Word document from the generated text."""
+        if not self.generated_report_text.strip():
+            messagebox.showwarning("No Content", "There is no generated report to save.")
+            return
+
         try:
-            # Prepare prompt
-            prompt = f"""You are an expert municipal analyst. Summarize this agenda item in 2-3 concise sentences:
+            doc = self.create_word_document(self.generated_report_text, self.meeting_dates_for_report)
+            self._save_document(doc)
+        except Exception as e:
+            messagebox.showerror("Save Error", f"An error occurred while creating the document: {str(e)}\n\n{traceback.format_exc()}")
 
-AGENDA ITEM: {item['AGENDA ITEM']}
-DEPARTMENT: {item.get('DEPT', 'N/A')}
-NOTES: {item.get('NOTES', 'No notes available')}
-
-Summary:"""
-            
-            # Generate response
-            response = self.llm_model(
-                prompt,
-                max_tokens=150,
-                temperature=0.3,
-                stop=["\\n\\n"]
-            )
-            
-            return response['choices'][0]['text'].strip()
-            
-        except:
-            # Fallback to simple concatenation
-            return f"{item['AGENDA ITEM']} - {item.get('NOTES', 'No notes available')}"
-            
     def create_word_document(self, content, meeting_dates):
-        """Create the Word document with proper formatting"""
+        """Create the Word document with proper formatting from raw text."""
         doc = Document()
         
         # Add content
@@ -646,9 +789,32 @@ Summary:"""
         # Add horizontal line
         doc.add_paragraph("_" * 80)
         
-        # Add LLM content
-        doc.add_paragraph(content)
-        
+        # Add LLM content by parsing it
+        for line in content.split('\n'):
+            stripped_line = line.strip()
+            if not stripped_line:
+                continue
+
+            # Check for section headers
+            if (stripped_line.startswith("Closed Session:") or
+                stripped_line.startswith("Special Presentations:") or
+                stripped_line.startswith("Consent:") or
+                stripped_line.startswith("Consideration or Public Hearing:")):
+                p = doc.add_paragraph()
+                p.paragraph_format.space_before = Pt(6)
+                runner = p.add_run(stripped_line)
+                runner.bold = True
+            elif stripped_line.startswith("- "):
+                # Add as a bullet point
+                doc.add_paragraph(stripped_line[2:].strip(), style='List Bullet')
+            else:
+                # Assumed to be a date line
+                p = doc.add_paragraph()
+                p.paragraph_format.space_before = Pt(18)
+                runner = p.add_run(stripped_line)
+                runner.bold = True
+                runner.font.size = Pt(14)
+
         # Add horizontal line
         doc.add_paragraph("_" * 80)
         

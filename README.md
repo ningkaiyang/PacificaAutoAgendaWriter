@@ -28,11 +28,13 @@ This application is currently in development (version 1.0) and serves as a power
 ## TBD
 *   **Video Demonstration:** A link for a video demonstration in the help tab is yet to be added.
 *   **Help Tab Improvements:** Planning to enhance the help tab with more detailed instructions and troubleshooting tips
-*   **GUI Experience:** Working on improving the overall user interface for smoother navigation and better usability - add Pacifica branding and make neater fun stuff
+*   **GUI Experience:** Working on improving the overall user interface for smoother navigation and better usability - add Pacifica branding and make neater fun stuff.
 *   **Improved Error Messages:** Add more details to why a .csv import fails, potentially scanning across set of expected column headers in the .csv until a mismatch to what is expected occurs, and then saying that it expects column 'A' to be 'MEETING DATE', etc.
-*   **Parsing ALL rows:** Parse and display ALL rows in the checkbox menu, and only check the ones marked Y, to allow for overall viewing of spreadsheet within app. Make menu more condensed.
+*   **Parsing ALL rows:** Parse and display ALL rows in the checkbox menu, and only check the ones marked Y, to allow for overall viewing of spreadsheet within app. Make checkbox menu more condensed and optimized quicker to load because it lags right now.
 *   **Ignoring Certain Statements:** Parse out and ignore everything denoted by brackets [] in what is sent to the LLM.
-*   **Fixes:** Fix scrolling in the rows display checkbox menu and fix drag and drop for .csv input
+*   **Fixes:** Fix scrolling in the rows display checkbox menu and fix drag and drop for .csv input.
+*   **Backing up:** Enable users to click back to Home to restart process if needed, and potentially implement some back buttons.
+
 
 ## Technical Stack
 *   **GUI:** `customtkinter`
