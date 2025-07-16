@@ -3,13 +3,13 @@
 Cross-platform (Windows-friendly) launcher for llama-cpp-python
 
 Installation prerequisites (PowerShell):
-    python -m pip install --upgrade llama-cpp-python psutil tqdm
+    python -m pip install --upgrade llama-cpp-python psutil
 
 Usage examples:
-    python "install llama.py"                                       # uses defaults
-    python "install llama.py" --model .\language_models\gemma.gguf  # explicit model
-    python "install llama.py" --threads 6 --ctx 8192                # tune threads/ctx
-    LLAMA_NUM_THREADS=8 python "install llama.py"                   # env-var override
+    python "install llama.py"                                         # uses defaults
+    python "install llama.py" --model ./language_models/gemma.gguf    # explicit model
+    python "install llama.py" --threads 6 --ctx 8192                  # tune threads/ctx
+    LLAMA_NUM_THREADS=8 python "install llama.py"                     # env-var override
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ import argparse
 import os
 import sys
 import time
+import contextlib
 from pathlib import Path
 from typing import Optional
 
@@ -27,11 +28,6 @@ try:
     import psutil  # type: ignore
 except ModuleNotFoundError:  # pragma: no cover
     psutil = None  # type: ignore
-
-try:
-    from tqdm import tqdm  # type: ignore
-except ModuleNotFoundError:  # pragma: no cover
-    tqdm = None  # type: ignore
 
 from llama_cpp import Llama
 
@@ -57,21 +53,28 @@ def default_threads() -> int:
     return max(1, logical_cores() // 2)
 
 
+@contextlib.contextmanager
+def suppress_stderr():
+    """Temporarily suppress stderr output."""
+    with open(os.devnull, "w") as devnull:
+        old_stderr = sys.stderr
+        sys.stderr = devnull
+        try:
+            yield
+        finally:
+            sys.stderr = old_stderr
+
+
 # --------------------------------------------------------------------------- #
 # Streaming output helper
 class TokenStreamer:
     """
     Collects tokens from llama_cpp stream=True and prints them immediately.
-    Optionally displays a running counter via tqdm if available.
+    Tracks token count and timing for performance stats.
     """
 
     def __init__(self) -> None:
         self._start = time.perf_counter()
-        desc = "Generating"
-        if tqdm:
-            self._bar = tqdm(total=None, unit="tok", desc=desc, leave=False)
-        else:
-            self._bar = None
         self.tokens_generated = 0
         self.text_parts: list[str] = []
 
@@ -81,12 +84,8 @@ class TokenStreamer:
             self.text_parts.append(token)
             print(token, end="", flush=True)
             self.tokens_generated += 1
-            if self._bar:
-                self._bar.update(1)
 
     def done(self) -> None:
-        if self._bar:
-            self._bar.close()
         print()  # final newline
         elapsed = time.perf_counter() - self._start
         if elapsed:
@@ -116,7 +115,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--ctx",
         type=int,
-        default=4096,
+        default=32768,
         help="Context window size (default: %(default)s)",
     )
     parser.add_argument(
@@ -133,7 +132,7 @@ def parse_args() -> argparse.Namespace:
         "--max-tokens",
         "-m",
         type=int,
-        default=512,
+        default=30000,
         help="Maximum tokens to generate (default: %(default)s)",
     )
     return parser.parse_args()
@@ -152,22 +151,27 @@ def main() -> None:  # noqa: D401
     print(f"Threads    : {args.threads} / {logical_cores()} logical cores")
     print(f"Context    : {args.ctx}")
     print(f"Prompt     : {args.prompt[:60]}{'...' if len(args.prompt) > 60 else ''}")
-    print("Loading model … (this may take a minute)")
+    print("Loading model... (this may take a minute)")
 
-    t_load_start = time.perf_counter()
-    llm = Llama(
-        model_path=str(model_path),
-        chat_format="gemma",
-        n_threads=args.threads,
-        n_ctx=args.ctx,
-        verbose=False,
-    )
-    print(f"Model loaded in {time.perf_counter() - t_load_start:.1f}s\n")
-
-    # Memory snapshot before generation
+    # Memory snapshot before loading
     rss_before: Optional[int] = None
     if psutil:
         rss_before = psutil.Process(os.getpid()).memory_info().rss
+
+    t_load_start = time.perf_counter()
+    
+    # Suppress Metal kernel messages during model loading
+    with suppress_stderr():
+        llm = Llama(
+            model_path=str(model_path),
+            chat_format="gemma",
+            n_threads=args.threads,
+            n_ctx=args.ctx,
+            verbose=False,
+        )
+    
+    print(f"Model loaded in {time.perf_counter() - t_load_start:.1f}s")
+    print("Generating response...\n")
 
     # ----------------------------------- #
     # Streaming generation
@@ -175,9 +179,9 @@ def main() -> None:  # noqa: D401
     stream = llm.create_chat_completion(
         messages=[{"role": "user", "content": args.prompt}],
         max_tokens=args.max_tokens,
-        temperature=0.8,
+        temperature=1.0,
         top_p=0.95,
-        top_k=40,
+        top_k=64,
         stream=True,
     )
 
