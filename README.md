@@ -33,8 +33,8 @@ This application is currently in development (version 1.0) and serves as a power
 *   **Parsing ALL rows:** Parse and display ALL rows in the checkbox menu, and only check the ones marked Y, to allow for overall viewing of spreadsheet within app. Make checkbox menu more condensed and optimized quicker to load because it lags right now.
 *   **Ignoring Certain Statements:** Parse out and ignore everything denoted by brackets [] in what is sent to the LLM.
 *   **Fixes:** Fix scrolling in the rows display checkbox menu and fix drag and drop for .csv input.
-*   **Backing up:** Enable users to click back to Home to restart process if needed, and potentially implement some back buttons.
-
+*   **Backing Up:** Enable users to click back to Home to restart process if needed, and potentially implement some back buttons.
+*   **Model Selection:** Allow for flexible model selection.
 
 ## Technical Stack
 *   **GUI:** `customtkinter`

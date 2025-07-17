@@ -45,13 +45,42 @@ def suppress_stderr():
         finally:
             sys.stderr = old_stderr
 
-PROMPT_TEMPLATE = """You are an expert municipal analyst responsible for creating agenda summaries for the City Council. Your task is to take a list of agenda items for a specific meeting date and format them into a clear, concise report.
+class TokenStreamer:
+    """Collects streamed tokens, suppresses <think> … </think> block,
+    prints visible tokens, and tracks speed."""
+    def __init__(self):
+        self._start = time.perf_counter()
+        self._tok = 0
+        self._buf = ""
+        self._passed = False                # after </think>
+    def __call__(self, chunk: dict):
+        tok = chunk["choices"][0]["delta"].get("content", "")
+        if not tok:
+            return
+        self._tok += 1
+        if not self._passed:
+            self._buf += tok
+            if "</think>" in self._buf:
+                self._passed = True
+                print(self._buf.split("</think>",1)[1], end="", flush=True)
+        else:
+            print(tok, end="", flush=True)
+    def done(self):
+        if not self._passed and self._buf:
+            print(self._buf, end="", flush=True)
+        dt = time.perf_counter() - self._start
+        if dt:
+            print(f"\nAverage speed: {self._tok/dt:.2f} tok/s")
+            print(f"Tokens: {self._tok}")
+            print(f"Elapsed Time: {dt:.2f}s")
+
+PROMPT_TEMPLATE = """You are an expert city clerk responsible for creating agenda summaries for the City Council. Your task is to take a list of agenda items for a specific meeting date and format them into a clear, concise report.
 
 Follow these rules strictly:
 
 1.  Format: The output must be raw text only. Do not use any markdown like '##' or '**'.
-2.  Date Header: The report for the date must start with the date itself, followed by any notes in parentheses. Example: "June 23: (Sue remote, Christine will Chair)"
-3.  Sections: The report must contain these four sections in this exact order:
+2.  Date Header: The report for the date must start with the date itself, formatted as '[Month Date]: ', followed by any notes in parentheses. Example: "June 23: (Sue remote, Christine will Chair)"
+3.  Sections: The report must then contain these four sections in this exact order:
         "Closed Session:"
         "Special Presentations:"
         "Consent:"
@@ -64,7 +93,7 @@ Follow these rules strictly:
     - Summarize each agenda item concisely. Make sure to concisely summarize each item broadly just so the Mayor knows about it. Keep it to about one full sentence per item before a new line and the next item.
     - If an item has multiple details or notes (e.g., a placeholder status), combine them on the same line. You can use parentheses () or semicolons ; for this. Example line: "- VRBO Voluntary Collection Agreement (placeholder; move to future agenda)"
     - DO NOT leave different agenda items in the same line, or split the same agenda item across different lines!
-    - If an item's notes include "• ADD DESCRIPTION", you must append " - ADD DESCRIPTION" to the end of that item's summary line. Do not create a new line for it. Example line: "- Proclamation: Suicide Prevention Month - ADD DESCRIPTION"
+    - If an item's notes include "• ADD DESCRIPTION", you must append " - ADD DESCRIPTION" to the end of that item's summary line. Do not create a new line for it. Example line: "- Suicide Prevention Month - ADD DESCRIPTION"
 
 Here are some examples of the desired output format:
 
@@ -551,7 +580,7 @@ Project Organization & Coordination:
 Madeleine Hur
 
 Acknowledgements:
-This application utilizes open-source Large Language Models, defaulting to Gemma-3n-E2B from Google, and the llama-cpp-python library.
+This application utilizes open-source Large Language Models, defaulting to Qwen-3-4B and the llama-cpp-python library.
 All logos and trademarks are the property of their respective owners."""
         
         credits_label = ctk.CTkLabel(
@@ -636,13 +665,13 @@ All logos and trademarks are the property of their respective owners."""
         """Load the LLM model in background"""
         def load_model():
             try:
-                model_path = "language_models/gemma-3n-E2B-it-Q8_0.gguf"
+                model_path = "language_models/Qwen3-4B-Q6_K.gguf"
                 if os.path.exists(model_path):
                     with suppress_stderr():
                         self.llm_model = Llama(
                             model_path=model_path,
-                            chat_format="gemma",
-                            n_ctx=8192,
+                            chat_format="chatml",
+                            n_ctx=20000,
                             n_threads=default_threads(),
                             verbose=False,
                         )
@@ -729,11 +758,14 @@ All logos and trademarks are the property of their respective owners."""
                 )
 
                 # Stream to GUI
+                streamer = TokenStreamer()
                 for chunk in stream:
-                    token = chunk["choices"][0]["delta"].get("content", "")
+                    streamer(chunk)
+                    token = chunk["choices"][0]["delta"].get("content","")
                     if token:
                         self.generated_report_text += token
                         self.after(0, self.update_generation_textbox, token)
+                streamer.done()
                 
                 # Add newlines between reports for different dates
                 self.generated_report_text += "\n\n"
