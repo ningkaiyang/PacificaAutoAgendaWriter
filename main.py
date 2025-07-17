@@ -49,20 +49,26 @@ PROMPT_TEMPLATE = """You are an expert municipal analyst responsible for creatin
 
 Follow these rules strictly:
 
-The output must be raw text only. Do not use any markdown like '##' or '**'.
-The report for the date must start with the date itself, followed by any notes in parentheses if available. Example: "June 23: (Sue remote, Christine will Chair)"
-The report must contain these four sections in this exact order:
-Closed Session:
-Special Presentations:
-Consent:
-Consideration or Public Hearing:
-Under each section, list the relevant summarized agenda items as bullet points starting with "- ".
-If a section has no items, write "TBD" after the section name. Example: "Closed Session: TBD"
-Summarize each agenda item concisely based on its title and notes. Focus on the core action or topic.
+1.  Format: The output must be raw text only. Do not use any markdown like '##' or '**'.
+2.  Date Header: The report for the date must start with the date itself, followed by any notes in parentheses. Example: "June 23: (Sue remote, Christine will Chair)"
+3.  Sections: The report must contain these four sections in this exact order:
+        "Closed Session:"
+        "Special Presentations:"
+        "Consent:"
+        "Consideration or Public Hearing:"
+4.  Bullet Points:
+    - CRITICAL: Each individual agenda item provided to you MUST be on its own new line in the output.
+    - Every item's line must start with a single hyphen and a space: "- ". Do NOT use other bullet point characters like '•' to start off a new line.
+    - If a section has no items, write "TBD" right after the section name. Example: "Closed Session: TBD"
+5.  Item Summarization Rules:
+    - Summarize each agenda item concisely. Make sure to concisely summarize each item broadly just so the Mayor knows about it. Keep it to about one full sentence per item before a new line and the next item.
+    - If an item has multiple details or notes (e.g., a placeholder status), combine them on the same line. You can use parentheses () or semicolons ; for this. Example line: "- VRBO Voluntary Collection Agreement (placeholder; move to future agenda)"
+    - DO NOT leave different agenda items in the same line, or split the same agenda item across different lines!
+    - If an item's notes include "• ADD DESCRIPTION", you must append " - ADD DESCRIPTION" to the end of that item's summary line. Do not create a new line for it. Example line: "- Proclamation: Suicide Prevention Month - ADD DESCRIPTION"
+
 Here are some examples of the desired output format:
 
 Example 1:
-
 June 23: (Sue remote, Christine will Chair)
 Closed Session: TBD
 Special Presentations:
@@ -76,8 +82,8 @@ Consideration or Public Hearing:
 - FY 2025-26 Budget Adoption
 - Annual position vacancy, recruitment and retention report (State law requirement AB2561)
 - Introduction of Ordinance Changing Council Meeting start-time and formal adoption of other Governance Training outcomes
-Example 2:
 
+Example 2:
 July 14: (Sue not attending, Christine will Chair)
 Closed Session: TBD
 Special Presentations:
@@ -86,15 +92,37 @@ Consent:
 - Annual POs/Agreements over $75K PWD-Wastewater
 - Labor MOUs (placeholder)
 - Sewer service charges for FY2025-26 (last year of approved 5-year schedule)
-- VRBO Voluntary Collection Agreement (placeholder) - Move to future agenda
+- VRBO Voluntary Collection Agreement (placeholder; Move to future agenda)
 Consideration or Public Hearing:
 - STR Ordinance Update Introduction
 - Continued Consideration of Climate Action and Resilience Plan Adoption
-Now, generate a report for the following meeting date based on the items provided below.
+
+Example 3 (Handling pending descriptions and TBDs):
+August 5:
+Closed Session: TBD
+Special Presentations: TBD
+Consent:
+- Resolution for park naming - ADD DESCRIPTION
+Consideration or Public Hearing: TBD
+
+NEGATIVE Example (DO NOT DO THIS):
+25-Aug:
+Closed Session: CLOSED SESSION - TBD • ADD DESCRIPTION - per K.Woodhouse 6/3
+Special Presentations:
+- City Staff New Hires (Semi-Annual Update) (placeholder) - moved from 6/23 to 8/25 per Y.Carter; HR to provide List of New Hires to K.Woodhouse for review
+- Proclamation - Suicide Prevention Month - September 2025 (placeholder) - ADD DESCRIPTION
+- Proclamation - National Preparedness Month - September 2025 (placeholder) - ADD DESCRIPTION
+Consideration or Public Hearing:
+- Housing Element Rezoning EIR Certification + Ordinance Introduction (possibly continued from 8/11) • Final Certification of EIR for Housing Element General Plan Amendments, Rezoning, and Objective Development Standards; Adoption of General Plan amendments; Introduction of Rezoning Ordinance - CAO Review: K.Murphy; To PC 5/19 & 7/7 mtg before going to Council
+- Resolution to Amend Council Rules & Code of Ethics to Change City Council Meeting Start Time to 6:00 PM & adopt other outcomes / direction from Council Governance Training (e.g. Vice Mayor nomenclature) • ADD DESCRIPTION - moved from 6/23 per K.Woodhouse; note: Municipal Code refers to Council Rules & Code of Ethics for regular meeting dates / start time and manner of conducting City Council meetings
+Public Hearing: Housing Element Rezoning EIR Certification + Ordinance Introduction (possibly continued from 8/11)
+Study Session on Revenue Generation (Title TBD from K. Woodhouse) • ADD DESCRIPTION - per K.Woodhouse 6/3
+
+Now, generate a report for the following meeting date based on the items provided below. Remember to place each item on a new line and to summarize each item to a few sentences.
 
 Meeting Date: {meeting_date}
 
-Agenda Items:
+Agenda Items (pre-sorted by section):
 {items_text}
 
 Report:
@@ -659,15 +687,17 @@ All logos and trademarks are the property of their respective owners."""
         try:
             self.generated_report_text = ""
             
-            # Group items by meeting date
+            # Group items by meeting date while preserving the order from the CSV
             grouped_by_date = {}
+            meeting_dates_in_order = []
             for item in selected_data:
                 date = item['MEETING DATE']
                 if date not in grouped_by_date:
                     grouped_by_date[date] = []
+                    meeting_dates_in_order.append(date)
                 grouped_by_date[date].append(item)
             
-            self.meeting_dates_for_report = sorted(grouped_by_date.keys())
+            self.meeting_dates_for_report = meeting_dates_in_order
 
             if self.llm_model is None:
                 raise ConnectionError("LLM model is not loaded. Please wait or restart the application.")
@@ -675,6 +705,10 @@ All logos and trademarks are the property of their respective owners."""
             # Process each date sequentially
             for date in self.meeting_dates_for_report:
                 items = grouped_by_date[date]
+
+                # Pre-sort items by agenda section to help the LLM
+                items.sort(key=lambda x: str(x.get('AGENDA SECTION', '')))
+                
                 items_text = ""
                 for item in items:
                     section = item.get('AGENDA SECTION', 'N/A')
@@ -687,10 +721,10 @@ All logos and trademarks are the property of their respective owners."""
                 # Generate response with streaming
                 stream = self.llm_model.create_chat_completion(
                     messages=[{"role": "user", "content": prompt}],
-                    max_tokens=2048,
-                    temperature=0.2,
+                    max_tokens=4096,
+                    temperature=1.0,
                     top_p=0.95,
-                    top_k=40,
+                    top_k=64,
                     stream=True,
                 )
 
@@ -752,6 +786,14 @@ All logos and trademarks are the property of their respective owners."""
         """Create the Word document with proper formatting from raw text."""
         doc = Document()
         
+        # Set single spacing for the document
+        style = doc.styles['Normal']
+        style.font.name = 'Calibri'
+        style.font.size = Pt(11)
+        style.paragraph_format.line_spacing = 1.0
+        style.paragraph_format.space_before = Pt(0)
+        style.paragraph_format.space_after = Pt(0)
+
         # Add content
         doc.add_paragraph()  # Blank line
         
@@ -761,21 +803,37 @@ All logos and trademarks are the property of their respective owners."""
         
         # Calculate month range
         if meeting_dates:
-            dates = [datetime.strptime(d, "%m/%d/%Y") if "/" in d else datetime.now() for d in meeting_dates]
-            min_date = min(dates)
-            max_date = max(dates)
-            
-            if min_date.month == max_date.month:
-                month_range = min_date.strftime("%B %Y")
-            else:
-                month_range = f"{min_date.strftime('%B')} - {max_date.strftime('%B %Y')}"
+            try:
+                # Date format is 'DD-Mon', e.g., '25-Aug'. Assume current year.
+                dates = [datetime.strptime(f"{d}-{datetime.now().year}", "%d-%b-%Y") for d in meeting_dates]
+                
+                # The list is chronologically sorted, so min is first, max is last.
+                min_date = dates[0]
+                max_date = dates[-1]
+
+                # Handle year-end crossover (e.g., Dec to Jan)
+                if min_date.month > max_date.month:
+                    max_date = max_date.replace(year=min_date.year + 1)
+                
+                if min_date.strftime('%B %Y') == max_date.strftime('%B %Y'):
+                    month_range = min_date.strftime("%B %Y")
+                elif min_date.year != max_date.year:
+                    month_range = f"{min_date.strftime('%B %Y')} - {max_date.strftime('%B %Y')}"
+                else:
+                    # Same year, different months
+                    month_range = f"{min_date.strftime('%B')} - {max_date.strftime('%B, %Y')}"
+            except (ValueError, IndexError):
+                # Fallback if parsing fails or list is empty
+                month_range = datetime.now().strftime("%B %Y")
         else:
             month_range = datetime.now().strftime("%B %Y")
             
         # Title
-        title = doc.add_paragraph(f"Major Council Agenda Items, Tentative for {month_range}")
-        title.runs[0].bold = True
-        title.runs[0].font.size = Pt(16)
+        title = doc.add_paragraph()
+        title.paragraph_format.space_after = Pt(6)
+        title_run = title.add_run(f"Major Council Agenda Items, Tentative for {month_range}")
+        title_run.bold = True
+        title_run.font.size = Pt(16)
         
         # Note
         note_text = ("Note: This is a Tentative Agenda Listing. Dates of items are subject to change "
@@ -783,40 +841,57 @@ All logos and trademarks are the property of their respective owners."""
                     "necessarily report all items, just ones that are noteworthy. The City Manager typically "
                     "reviews the tentative agenda items list in more detail with each Councilmember during "
                     "individual meetings.")
-        note = doc.add_paragraph(note_text)
-        note.runs[0].italic = True
+        note = doc.add_paragraph()
+        note_run = note.add_run(note_text)
+        note_run.italic = True
         
         # Add horizontal line
-        doc.add_paragraph("_" * 80)
+        doc.add_paragraph("_" * 78).paragraph_format.space_before = Pt(12)
         
         # Add LLM content by parsing it
+        is_first_date = True
         for line in content.split('\n'):
             stripped_line = line.strip()
             if not stripped_line:
                 continue
 
-            # Check for section headers
-            if (stripped_line.startswith("Closed Session:") or
+            # Heuristic to detect date line (doesn't start with '-' or a known section header)
+            is_date_line = not (
+                stripped_line.startswith("- ") or
+                stripped_line.startswith("Closed Session:") or
                 stripped_line.startswith("Special Presentations:") or
                 stripped_line.startswith("Consent:") or
-                stripped_line.startswith("Consideration or Public Hearing:")):
+                stripped_line.startswith("Consideration or Public Hearing:")
+            )
+
+            if is_date_line:
+                if not is_first_date:
+                    doc.add_paragraph("_" * 78).paragraph_format.space_before = Pt(18)
+                is_first_date = False
+
                 p = doc.add_paragraph()
-                p.paragraph_format.space_before = Pt(6)
-                runner = p.add_run(stripped_line)
-                runner.bold = True
-            elif stripped_line.startswith("- "):
-                # Add as a bullet point
-                doc.add_paragraph(stripped_line[2:].strip(), style='List Bullet')
-            else:
-                # Assumed to be a date line
-                p = doc.add_paragraph()
-                p.paragraph_format.space_before = Pt(18)
+                p.paragraph_format.space_before = Pt(12)
+                p.paragraph_format.space_after = Pt(6)
                 runner = p.add_run(stripped_line)
                 runner.bold = True
                 runner.font.size = Pt(14)
 
+            # Check for section headers (Level 1 Bullet)
+            elif (stripped_line.startswith("Closed Session:") or
+                stripped_line.startswith("Special Presentations:") or
+                stripped_line.startswith("Consent:") or
+                stripped_line.startswith("Consideration or Public Hearing:")):
+                p = doc.add_paragraph(stripped_line, style='List Bullet')
+                p.paragraph_format.left_indent = Inches(0.25)
+                p.paragraph_format.space_before = Pt(6)
+
+            elif stripped_line.startswith("- "):
+                # Item under a section (Level 2 Bullet)
+                p = doc.add_paragraph(stripped_line[2:].strip(), style='List Bullet')
+                p.paragraph_format.left_indent = Inches(0.75)
+
         # Add horizontal line
-        doc.add_paragraph("_" * 80)
+        doc.add_paragraph("_" * 78).paragraph_format.space_before = Pt(12)
         
         # TBD section
         tbd = doc.add_paragraph("TBD:")
