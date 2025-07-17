@@ -70,20 +70,42 @@ class TokenStreamer:
     def __init__(self) -> None:
         self._start = time.perf_counter()
         self.tokens_generated = 0
-        self.text_parts: list[str] = []
+        self.text_buffer = ""  # we'll buffer text here until we pass the thinking block
+        self.think_block_passed = False  # a flag to see if we are past the <think> block
 
     def __call__(self, chunk: dict) -> None:  # noqa: D401
         token = chunk["choices"][0]["delta"].get("content", "")
-        if token:
-            self.text_parts.append(token)
+        if not token:
+            return  # do nothing if there's no token
+
+        self.tokens_generated += 1
+
+        if not self.think_block_passed:
+            # if we haven't passed the think block, add the token to our buffer
+            self.text_buffer += token
+            think_end_tag = "</think>"
+            # check if the end tag is now in our buffer
+            if think_end_tag in self.text_buffer:
+                self.think_block_passed = True
+                # find the content that comes after the tag
+                content_to_print = self.text_buffer.split(think_end_tag, 1)[1]
+                # print it, stripping any leading whitespace, and flush it to the console
+                print(content_to_print.lstrip(), end="", flush=True)
+        else:
+            # if we are past the think block, just print tokens as they come
             print(token, end="", flush=True)
-            self.tokens_generated += 1
 
     def done(self) -> None:
-        print()  # final newline
+        # if the model finished generating before ever passing a think block, print the whole buffer
+        if not self.think_block_passed and self.text_buffer:
+            print(self.text_buffer)
+            
         elapsed = time.perf_counter() - self._start
         if elapsed:
+            # print a newline to separate from the next potential output
             print(f"\nAverage speed: {self.tokens_generated/elapsed:.2f} tok/s")
+            print(f"Tokens: {self.tokens_generated}")
+            print(f"Elapsed Time: {elapsed:.2f}")
 
 # --------------------------------------------------------------------------- #
 def parse_args() -> argparse.Namespace:
@@ -108,7 +130,7 @@ def parse_args() -> argparse.Namespace:
         "-p",
         type=str,
         default=(
-            "Hi! Who are you?"
+            "Hi! Who are you? How many letters are there in Strawbery? And how many Rs are there? And yes, I do mean to include the typo."
         ),
         help="Prompt to send to the model.",
     )
@@ -137,21 +159,14 @@ def main() -> None:  # noqa: D401
 
     t_load_start = time.perf_counter()
 
-    # show progress if model is being downloaded for the first time
-    def progress_callback(bytes_downloaded, total_bytes):
-        percent = (bytes_downloaded / total_bytes) * 100 if total_bytes else 0
-        print(f"\rDownloading model: {bytes_downloaded}/{total_bytes} bytes ({percent:.2f}%)", end="", flush=True)
-
     # suppress Metal kernel messages during model loading
     with suppress_stderr():
-        llm = Llama.from_pretrained(
-            repo_id="unsloth/Qwen3-4B-GGUF",  # use the unsloth repo
-            filename="Qwen3-4B-Q6_K.gguf",    # use the specified filename
+        llm = Llama(
+            model_path="language_models/Qwen3-4B-Q6_K.gguf",  # using the local model path now
             chat_format="chatml",
             n_threads=args.threads,
             n_ctx=args.ctx,
             verbose=False,
-            progress_callback=progress_callback,  # show download progress
         )
     print()  # make sure we end the progress line
 
