@@ -117,13 +117,8 @@ class GUITokenFilter:
 
 PROMPT_TEMPLATE = """You are an expert city clerk responsible for creating agenda summaries for the City Council. Your task is to take a list of agenda items for a specific meeting date and format them into a clear, concise report.
 
-THE VERY FIRST THING is to look through and summarize each item following these rules FIRST:
-- Summarize each agenda item in ONE short clause (≈ 12 words or fewer) that clearly signals what the item is.  Omit internal workflow words such as "placeholder", "start time", review notes, and remove every "•" character.  This is for the Mayor’s quick scan.
-- If an item has multiple details or notes (e.g., a placeholder status), combine them on the same line. You can use parentheses () or semicolons ; for this. Example line: "- VRBO Voluntary Collection Agreement (move to future agenda)"
-- DO NOT leave different agenda items in the same line, or split the same agenda item across different lines!
-- If an item's notes include "• ADD DESCRIPTION", you must append " - ADD DESCRIPTION" to the end of that item's summary line. Do not create a new line for it. Example line: "- Suicide Prevention Month - ADD DESCRIPTION"
-
-Next, you can write the full report. Follow these rules strictly:
+You have recieved a set of summarized items. You are to categorize them and properly edit them in small ways if necessary (capitalization, merging, etc) and put them together into a resport.
+Follow these rules strictly:
 1.  Format: The output must be raw text only. Do not use any markdown like '##' or '**'.
 2.  Date Header: The report must start with the FULL month name followed by the day number, e.g. "January 1:".  NEVER use numeric-month abbreviations such as "1-Jan".  If there are meeting-level notes, place them in parentheses immediately after the date.
 3.  Sections: The report must BEGIN with EITHER "Study Session:" or "Closed Session:" depending on which type of item exists for that meeting date.
@@ -141,7 +136,7 @@ Next, you can write the full report. Follow these rules strictly:
 Here are some examples of the desired output format:
 
 Example 1:
-June 23: (Sue remote, Christine will Chair)
+June 23:
 Closed Session: TBD
 Special Presentations:
 - Parks Make Life Better Month
@@ -156,7 +151,7 @@ Consideration or Public Hearing:
 - Introduction of Ordinance Changing Council Meeting start-time and formal adoption of other Governance Training outcomes
 
 Example 2:
-July 14: (Sue not attending, Christine will Chair)
+July 14:
 Closed Session: TBD
 Special Presentations:
 - Joann Arnos, OSPAC Years of Service
@@ -187,7 +182,7 @@ Consent:
 - Bi-Weekly Disbursements approval
 Consideration or Public Hearing: TBD
 
-NEGATIVE Example (DO NOT DO THIS - lots of bad '•' usage, and too-long descriptions, and sloppy '-' dashes):
+NEGATIVE Example (DO NOT DO THIS: lots of bad bullet '•' usage, too-long run-on descriptions, incorrect date format):
 25-Aug:
 Closed Session: CLOSED SESSION - TBD • ADD DESCRIPTION - per K.Woodhouse 6/3
 Special Presentations:
@@ -202,7 +197,7 @@ Study Session on Revenue Generation (Title TBD from K. Woodhouse) • ADD DESCRI
 
 Now, generate a report for the following meeting date based on the items provided below. Remember to place each item on a new line and to summarize each item to a few sentences.
 
-Meeting Date: {meeting_date}
+Meeting Date: {meeting_date} - IMPORTANT: THIS IS THE ACTUAL METING DATE FOR YOUR REPORT!!!
 
 Agenda Items (pre-sorted by section):
 {items_text}
@@ -800,50 +795,78 @@ All logos and trademarks are the property of their respective owners."""
                 
                 # --- START: TWO-PASS GENERATION ---
 
-                # PASS 1: Generate the thought process with a limited token count
-                think_prompt = PROMPT_TEMPLATE.format(meeting_date=date, items_text=items_text.strip())
-                # ensure thinking is on
-                think_prompt += " /think"
+                # PASS 1: Generate line-by-line summaries
+                summarization_prompt = f"""You are an expert city clerk. Your task is to summarize each agenda item into ONE short clause (around 15 words or fewer).
+
+Rules for summarization:
+- Summarize each agenda item in ONE short clause that clearly signals what the item is
+- You MUST omit unnecessary internal workflow words such as "placeholder", "start time", "review notes", and "per [person]". DO NOT say "per Y.Carter" or "per K.Woodhouse" or anything.
+- Remove characters that would not work well for reading within the item like all "•" characters
+- If an item has multiple details, combine them using parentheses () or semicolons ; ONLY, do not use "•"
+- If an item's notes include "• ADD DESCRIPTION", delete it and append " - ADD DESCRIPTION" to the end
+- The summaries should be prepended by which category they belong in: "Study Session:" or "Closed Session:" or "Special Presentations:" or "Consent:" or "Consideration or Public Hearing:".
+
+Some good examples:
+- Special Presentations: Proclamation - Suicide Prevention Month - September 2025 - ADD DESCRIPTION
+- Closed Study: TBD
+- Study Session: Study Session on Revenue Generation - ADD DESCRIPTION
+- Special Presentations: City Staff New Hires (Semi-Annual Update) - moved from 6/23 to 8/25 per Y.Carter
+- Consent: Annual POs/Agreements over $75K PWD-Wastewater
+- Consent: Sewer service charges for FY2025-26 (last year of approved 5-year schedule)
+- Consideration or Public Hearing: Continued Consideration of Climate Action and Resilience Plan Adoption
+
+Meeting Date: {date} - IMPORTANT! THIS IS THE ACTUAL MEETING DATE, KEEP TRACK OF IT CAREFULLY! Start off your summarization lines with this meeting date, parsed neatly as <Month Day> like "Meeting Date: January 1" or "Meeting Date: December 31".
+
+Agenda Items to Summarize:
+{items_text.strip()}
+
+IMPORTANT: Note you only have a 1000 token limit before you must create an output, so don't think in circles and just generate summaries and output when they look decent. Save tokens and decide on a summary per line quickly without overthinking.
+Provide ONLY the proper meeting date format and then the summarized lines, capitalized and prepended properly, one per line: /think"""
                 
-                print("\n--- PASS 1: THINKING ---")
-                # use thinking mode settings
-                think_stream = self.llm_model.create_chat_completion(
-                    messages=[{"role": "user", "content": think_prompt}],
-                    max_tokens=512,  # hard limit for the thinking process
-                    temperature=0.6,
+                print("\n--- PASS 1: SUMMARIZATION ---")
+                summarization_stream = self.llm_model.create_chat_completion(
+                    messages=[{"role": "user", "content": summarization_prompt}],
+                    max_tokens=4000,  # limited tokens for focused summarization
+                    temperature=0,  # lower temperature for more consistent summaries
                     top_p=0.95,
                     top_k=20,
                     stream=True,
-                    stop=["</think>"]  # stop generation once the thought is complete
                 )
 
-                # let's track speed and time for thinking pass
+                # Collect summarized items from Pass 1
                 think_streamer = TokenStreamer()
-                thinking_text = ""
-                for chunk in think_stream:
+                summarized_items = ""
+                for chunk in summarization_stream:
                     token = chunk["choices"][0]["delta"].get("content", "")
-                    thinking_text += token
+                    summarized_items += token
                     think_streamer(chunk)  # count tokens and print for debug
-                think_streamer.done()  # show speed and time for thinking
-                print(f"THOUGHT: {thinking_text}")  # for
+                think_streamer.done()
 
-                # PASS 2: Generate the final answer with thinking disabled
-                answer_prompt = PROMPT_TEMPLATE.format(meeting_date=date, items_text=items_text.strip())
-                answer_prompt += " /no_think"
+                # Clean up summarized_items to remove any incomplete thinking tags
+                # and extract only the actual bullet point content
+                clean_summarized_items = self._extract_clean_summary(summarized_items)
 
-                print("\n--- PASS 2: ANSWERING ---")
-                # use non-thinking mode settings per documentation
-                answer_stream = self.llm_model.create_chat_completion(
-                    messages=[{"role": "user", "content": answer_prompt}],
-                    max_tokens=4096,
-                    temperature=0.7,
-                    top_p=0.8,
+                # PASS 2: Generate final formatted report using the summaries
+                # use the main prompt template for the final formatting pass
+                # we replace the original items_text with the summarized ones from pass 1
+                # and add a /no_think instruction to prevent the model from re-summarizing
+                format_prompt = PROMPT_TEMPLATE.format(
+                    meeting_date=date,
+                    items_text=clean_summarized_items.strip()
+                ) + ' /no_think'
+
+                print("\n--- PASS 2: FORMATTING ---")
+                format_stream = self.llm_model.create_chat_completion(
+                    messages=[{"role": "user", "content": format_prompt}],
+                    max_tokens=4000,
+                    temperature=0,  # low temperature for consistent formatting
+                    top_p=0.95,
                     top_k=20,
                     stream=True,
                 )
 
                 # This is the stream we will show to the user
-                stream = answer_stream
+                stream = format_stream
                 # --- END: TWO-PASS GENERATION ---
 
                 # Stream to console (unfiltered) and GUI (filtered)
@@ -890,6 +913,25 @@ All logos and trademarks are the property of their respective owners."""
                 state="normal"
             ))
             
+    def _extract_clean_summary(self, raw_summary: str) -> str:
+        """Extract clean bullet point summaries from raw LLM output, removing thinking tags."""
+        # Find and remove the thinking block
+        think_end = raw_summary.find('</think>')
+        if think_end != -1:
+            # Remove everything up to and including </think>
+            cleaned = raw_summary[think_end + 8:].strip()
+        else:
+            # No proper thinking block found, try to work with what we have
+            cleaned = raw_summary
+        
+        # Strip every line just in case
+        lines = cleaned.split('\n')
+        item_lines = []
+        for line in lines:
+            stripped = line.strip()
+            item_lines.append(stripped)
+        return '\n'.join(item_lines)
+
     def update_generation_textbox(self, token: str):
         """Appends a token to the generation textbox. Must be called from the main thread."""
         self.generation_textbox.insert("end", token)
