@@ -126,8 +126,8 @@ SUMMARISATION RULE (do this first):
 
 After cleaning and summarising, follow these additional formatting rules:
 
-1. Format: Output must be plain text – no Markdown, no asterisks.
-2. Date header: Start each meeting block with "<Full Month Name> <Day>:", e.g. "August 25:". Never use "25-Aug". If there are whole-meeting notes, place them in parentheses after the date.
+1. Format: Output must be plain text - no Markdown, no asterisks.
+2. Date header: Start each meeting block with "<Full Month Name> <Day>:", e.g. "January 1:". Never use "1-Jan". If there are whole-meeting notes, place them in parentheses after the date.
 3. Section order:
    a) Begin with "Study Session:" or "Closed Session:" (whichever exists; if both, Study first).
    b) Then always list, in this exact sequence:
@@ -173,14 +173,14 @@ August 5:
 Closed Session: TBD
 Special Presentations: TBD
 Consent:
-- Resolution for park naming – ADD DESCRIPTION
+- Resolution for park naming - ADD DESCRIPTION
 Consideration or Public Hearing: TBD
 
 Example 4 (Meeting that includes both a Closed Session and Study Session):
 September 10:
-Closed Session: TBD
 Study Session:
-- Joint Study Session on Revenue Options – ADD DESCRIPTION
+- Joint Study Session on Revenue Options - ADD DESCRIPTION
+Closed Session: TBD
 Special Presentations: TBD
 Consent:
 - Bi-Weekly Disbursements approval
@@ -791,8 +791,8 @@ All logos and trademarks are the property of their respective owners."""
                 if self.disable_thinking:
                     prompt = prompt + " /no_think"
                     # Also adjust temperature per documentation recommendations
-                    temperature = 0.7
-                    top_p = 0.8
+                    temperature = 0
+                    top_p = 0.95
                     top_k = 20
                 else:
                     # Use thinking mode settings

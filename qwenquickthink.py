@@ -117,7 +117,7 @@ class GUITokenFilter:
 
 PROMPT_TEMPLATE = """You are an expert city clerk responsible for creating agenda summaries for the City Council. Your task is to take a list of agenda items for a specific meeting date and format them into a clear, concise report.
 
-Item Summarization Rules (do this for each item first):
+THE VERY FIRST THING is to look through and summarize each item following these rules FIRST:
 - Summarize each agenda item in ONE short clause (≈ 12 words or fewer) that clearly signals what the item is.  Omit internal workflow words such as "placeholder", "start time", review notes, and remove every "•" character.  This is for the Mayor’s quick scan.
 - If an item has multiple details or notes (e.g., a placeholder status), combine them on the same line. You can use parentheses () or semicolons ; for this. Example line: "- VRBO Voluntary Collection Agreement (move to future agenda)"
 - DO NOT leave different agenda items in the same line, or split the same agenda item across different lines!
@@ -798,30 +798,53 @@ All logos and trademarks are the property of their respective owners."""
                     notes = str(item.get('NOTES', 'No notes available')).replace('\n', ' ')
                     items_text += f"- Section: {section}, Item: \"{agenda_item}\", Notes: \"{notes}\"\n"
                 
-                prompt = PROMPT_TEMPLATE.format(meeting_date=date, items_text=items_text.strip())
-                # Toggle Thinking
-                self.disable_thinking = False
-                if self.disable_thinking:
-                    prompt = prompt + " /no_think"
-                    # Also adjust temperature per documentation recommendations
-                    temperature = 0.7
-                    top_p = 0.8
-                    top_k = 20
-                else:
-                    # Use thinking mode settings
-                    temperature = 0.6
-                    top_p = 0.95
-                    top_k = 20
+                # --- START: TWO-PASS GENERATION ---
 
-                # Generate response with streaming
-                stream = self.llm_model.create_chat_completion(
-                    messages=[{"role": "user", "content": prompt}],
+                # PASS 1: Generate the thought process with a limited token count
+                think_prompt = PROMPT_TEMPLATE.format(meeting_date=date, items_text=items_text.strip())
+                # ensure thinking is on
+                think_prompt += " /think"
+                
+                print("\n--- PASS 1: THINKING ---")
+                # use thinking mode settings
+                think_stream = self.llm_model.create_chat_completion(
+                    messages=[{"role": "user", "content": think_prompt}],
+                    max_tokens=512,  # hard limit for the thinking process
+                    temperature=0.6,
+                    top_p=0.95,
+                    top_k=20,
+                    stream=True,
+                    stop=["</think>"]  # stop generation once the thought is complete
+                )
+
+                # let's track speed and time for thinking pass
+                think_streamer = TokenStreamer()
+                thinking_text = ""
+                for chunk in think_stream:
+                    token = chunk["choices"][0]["delta"].get("content", "")
+                    thinking_text += token
+                    think_streamer(chunk)  # count tokens and print for debug
+                think_streamer.done()  # show speed and time for thinking
+                print(f"THOUGHT: {thinking_text}")  # for
+
+                # PASS 2: Generate the final answer with thinking disabled
+                answer_prompt = PROMPT_TEMPLATE.format(meeting_date=date, items_text=items_text.strip())
+                answer_prompt += " /no_think"
+
+                print("\n--- PASS 2: ANSWERING ---")
+                # use non-thinking mode settings per documentation
+                answer_stream = self.llm_model.create_chat_completion(
+                    messages=[{"role": "user", "content": answer_prompt}],
                     max_tokens=4096,
-                    temperature=temperature,
-                    top_p=top_p,
-                    top_k=top_k,
+                    temperature=0.7,
+                    top_p=0.8,
+                    top_k=20,
                     stream=True,
                 )
+
+                # This is the stream we will show to the user
+                stream = answer_stream
+                # --- END: TWO-PASS GENERATION ---
 
                 # Stream to console (unfiltered) and GUI (filtered)
                 streamer = TokenStreamer()
