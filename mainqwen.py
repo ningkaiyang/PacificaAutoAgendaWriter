@@ -1,6 +1,7 @@
 """
 City of Pacifica - Agenda Summary Generator
 A modern desktop application for generating AI-powered council agenda summaries
+TODO: More preprocessing to make LLM performance better, Easier Format, fix bugs like scrolling and drag and drop and Save Report button taking from text box and Qwen Thinking Traces appearing 
 """
 
 import customtkinter as ctk
@@ -46,33 +47,69 @@ def suppress_stderr():
             sys.stderr = old_stderr
 
 class TokenStreamer:
-    """Collects streamed tokens, suppresses <think> … </think> block,
-    prints visible tokens, and tracks speed."""
+    """Collects streamed tokens, prints all tokens (including thinking tags) for debugging,
+    and tracks speed."""
     def __init__(self):
         self._start = time.perf_counter()
         self._tok = 0
-        self._buf = ""
-        self._passed = False                # after </think>
+        
     def __call__(self, chunk: dict):
         tok = chunk["choices"][0]["delta"].get("content", "")
         if not tok:
             return
         self._tok += 1
-        if not self._passed:
-            self._buf += tok
-            if "</think>" in self._buf:
-                self._passed = True
-                print(self._buf.split("</think>",1)[1], end="", flush=True)
-        else:
-            print(tok, end="", flush=True)
+        # Print everything to console for debugging
+        print(tok, end="", flush=True)
+        
     def done(self):
-        if not self._passed and self._buf:
-            print(self._buf, end="", flush=True)
         dt = time.perf_counter() - self._start
         if dt:
             print(f"\nAverage speed: {self._tok/dt:.2f} tok/s")
             print(f"Tokens: {self._tok}")
             print(f"Elapsed Time: {dt:.2f}s")
+
+class GUITokenFilter:
+    """Filters out <think>...</think> blocks for clean GUI display."""
+    def __init__(self):
+        self._buf = ""
+        self._in_think = False
+        
+    def filter_token(self, token: str) -> str:
+        """Filter a token and return the clean portion for GUI display."""
+        if not token:
+            return ""
+            
+        self._buf += token
+        result = ""
+        
+        while self._buf:
+            if not self._in_think:
+                # Look for start of thinking block
+                think_start = self._buf.find("<think>")
+                if think_start == -1:
+                    # No thinking block found, return all buffered content
+                    result += self._buf
+                    self._buf = ""
+                else:
+                    # Found thinking block start, return content before it
+                    result += self._buf[:think_start]
+                    self._buf = self._buf[think_start:]
+                    self._in_think = True
+                    # Remove the <think> tag from buffer
+                    if self._buf.startswith("<think>"):
+                        self._buf = self._buf[7:]  # len("<think>") = 7
+            else:
+                # We're inside a thinking block, look for end
+                think_end = self._buf.find("</think>")
+                if think_end == -1:
+                    # No end found yet, consume all buffer
+                    self._buf = ""
+                else:
+                    # Found end, remove everything up to and including </think>
+                    self._buf = self._buf[think_end + 8:]  # len("</think>") = 8
+                    self._in_think = False
+                    
+        return result
 
 PROMPT_TEMPLATE = """You are an expert city clerk responsible for creating agenda summaries for the City Council. Your task is to take a list of agenda items for a specific meeting date and format them into a clear, concise report.
 
@@ -740,31 +777,53 @@ All logos and trademarks are the property of their respective owners."""
                 
                 items_text = ""
                 for item in items:
-                    section = item.get('AGENDA SECTION', 'N/A')
-                    agenda_item = item.get('AGENDA ITEM', 'N/A')
-                    notes = item.get('NOTES', 'No notes available')
+                    section = str(item.get('AGENDA SECTION', 'N/A')).replace('\n', ' ')
+                    agenda_item = str(item.get('AGENDA ITEM', 'N/A')).replace('\n', ' ')
+                    notes = str(item.get('NOTES', 'No notes available')).replace('\n', ' ')
                     items_text += f"- Section: {section}, Item: \"{agenda_item}\", Notes: \"{notes}\"\n"
                 
                 prompt = PROMPT_TEMPLATE.format(meeting_date=date, items_text=items_text.strip())
+                # Toggle Thinking
+                self.disable_thinking = False
+                if self.disable_thinking:
+                    prompt = prompt + " /no_think"
+                    # Also adjust temperature per documentation recommendations
+                    temperature = 0.7
+                    top_p = 0.8
+                    top_k = 20
+                else:
+                    # Use thinking mode settings
+                    temperature = 0.6
+                    top_p = 0.95
+                    top_k = 20
 
                 # Generate response with streaming
                 stream = self.llm_model.create_chat_completion(
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=4096,
-                    temperature=1.0,
-                    top_p=0.95,
-                    top_k=64,
+                    temperature=temperature,
+                    top_p=top_p,
+                    top_k=top_k,
                     stream=True,
                 )
 
-                # Stream to GUI
+                # Stream to console (unfiltered) and GUI (filtered)
                 streamer = TokenStreamer()
+                gui_filter = GUITokenFilter()
+                
                 for chunk in stream:
+                    # Console output (unfiltered for debugging)
                     streamer(chunk)
+                    
+                    # GUI output (filtered)
                     token = chunk["choices"][0]["delta"].get("content","")
                     if token:
-                        self.generated_report_text += token
-                        self.after(0, self.update_generation_textbox, token)
+                        # Filter token for GUI display
+                        clean_token = gui_filter.filter_token(token)
+                        if clean_token:
+                            self.generated_report_text += clean_token
+                            self.after(0, self.update_generation_textbox, clean_token)
+                            
                 streamer.done()
                 
                 # Add newlines between reports for different dates
