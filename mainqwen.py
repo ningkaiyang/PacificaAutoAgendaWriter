@@ -21,6 +21,7 @@ import traceback
 import sys
 import time
 import contextlib
+import resource  # i'll add this to track memory usage
 
 # Configure CustomTkinter
 ctk.set_appearance_mode("light")
@@ -67,6 +68,9 @@ class TokenStreamer:
             print(f"\nAverage speed: {self._tok/dt:.2f} tok/s")
             print(f"Tokens: {self._tok}")
             print(f"Elapsed Time: {dt:.2f}s")
+            # memory usage on macOS is in bytes, so i'll convert to MB
+            mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 / 1024
+            print(f"Peak Memory Usage: {mem_mb:.2f} MB")
 
 class GUITokenFilter:
     """Filters out <think>...</think> blocks for clean GUI display."""
@@ -116,18 +120,21 @@ PROMPT_TEMPLATE = """You are an expert city clerk responsible for creating agend
 Follow these rules strictly:
 
 1.  Format: The output must be raw text only. Do not use any markdown like '##' or '**'.
-2.  Date Header: The report for the date must start with the date itself, formatted as '[Month Date]: ', followed by any notes in parentheses. Example: "June 23: (Sue remote, Christine will Chair)"
-3.  Sections: The report must then contain these four sections in this exact order:
-        "Closed Session:"
+2.  Date Header: The report must start with the FULL month name followed by the day number, e.g. "August 25:".  NEVER use numeric-month abbreviations such as "25-Aug".  If there are meeting-level notes, place them in parentheses immediately after the date.
+3.  Sections: The report must BEGIN with EITHER "Study Session:" or "Closed Session:" depending on which type of item exists for that meeting date.
+        • If BOTH exist, list "Study Session:" first and "Closed Session:" second.
+        • If neither exists, start with the first section that does have items.
+    After the opening section(s) continue with the following in this order:
         "Special Presentations:"
         "Consent:"
         "Consideration or Public Hearing:"
+        (Do not include a section header that has no items, unless you need to write "TBD" for that section.)
 4.  Bullet Points:
     - CRITICAL: Each individual agenda item provided to you MUST be on its own new line in the output.
     - Every item's line must start with a single hyphen and a space: "- ". Do NOT use other bullet point characters like '•' to start off a new line.
     - If a section has no items, write "TBD" right after the section name. Example: "Closed Session: TBD"
 5.  Item Summarization Rules:
-    - Summarize each agenda item concisely. Make sure to concisely summarize each item broadly just so the Mayor knows about it. Keep it to about one full sentence per item before a new line and the next item.
+    - Summarize each agenda item in ONE short clause (≈ 12 words or fewer) that clearly signals what the item is.  Omit internal workflow words such as "placeholder", "start time", review notes, and remove every "•" character.  This is for the Mayor’s quick scan.
     - If an item has multiple details or notes (e.g., a placeholder status), combine them on the same line. You can use parentheses () or semicolons ; for this. Example line: "- VRBO Voluntary Collection Agreement (placeholder; move to future agenda)"
     - DO NOT leave different agenda items in the same line, or split the same agenda item across different lines!
     - If an item's notes include "• ADD DESCRIPTION", you must append " - ADD DESCRIPTION" to the end of that item's summary line. Do not create a new line for it. Example line: "- Suicide Prevention Month - ADD DESCRIPTION"
@@ -169,6 +176,15 @@ Closed Session: TBD
 Special Presentations: TBD
 Consent:
 - Resolution for park naming - ADD DESCRIPTION
+Consideration or Public Hearing: TBD
+
+Example 4 (Meeting that includes a Study Session):
+September 10:
+Study Session:
+- Joint Study Session on Revenue Options - ADD DESCRIPTION
+Special Presentations: TBD
+Consent:
+- Bi-Weekly Disbursements approval
 Consideration or Public Hearing: TBD
 
 NEGATIVE Example (DO NOT DO THIS - lots of bad '•' usage, and too-long descriptions, and sloppy '-' dashes):
@@ -708,7 +724,7 @@ All logos and trademarks are the property of their respective owners."""
                         self.llm_model = Llama(
                             model_path=model_path,
                             chat_format="chatml",
-                            n_ctx=20000,
+                            n_ctx=10000,
                             n_threads=default_threads(),
                             verbose=False,
                         )
@@ -949,6 +965,7 @@ All logos and trademarks are the property of their respective owners."""
             # Heuristic to detect date line (doesn't start with '-' or a known section header)
             is_date_line = not (
                 stripped_line.startswith("- ") or
+                stripped_line.startswith("Study Session:") or
                 stripped_line.startswith("Closed Session:") or
                 stripped_line.startswith("Special Presentations:") or
                 stripped_line.startswith("Consent:") or
@@ -968,10 +985,11 @@ All logos and trademarks are the property of their respective owners."""
                 runner.font.size = Pt(14)
 
             # Check for section headers (Level 1 Bullet)
-            elif (stripped_line.startswith("Closed Session:") or
-                stripped_line.startswith("Special Presentations:") or
-                stripped_line.startswith("Consent:") or
-                stripped_line.startswith("Consideration or Public Hearing:")):
+            elif (stripped_line.startswith("Study Session:") or
+                  stripped_line.startswith("Closed Session:") or
+                  stripped_line.startswith("Special Presentations:") or
+                  stripped_line.startswith("Consent:") or
+                  stripped_line.startswith("Consideration or Public Hearing:")):
                 p = doc.add_paragraph(stripped_line, style='List Bullet')
                 p.paragraph_format.left_indent = Inches(0.25)
                 p.paragraph_format.space_before = Pt(6)
