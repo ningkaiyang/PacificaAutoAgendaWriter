@@ -115,32 +115,30 @@ class GUITokenFilter:
                     
         return result
 
-PROMPT_TEMPLATE = """You are an expert city clerk responsible for creating agenda summaries for the City Council. Your task is to take a list of agenda items for a specific meeting date and format them into a clear, concise report.
+PROMPT_TEMPLATE = """You are an expert city clerk responsible for creating agenda summaries for the City Council. Your task is to take a list of agenda items for a specific meeting date and turn them into a clear, concise mayor-friendly report.
 
-Follow these rules strictly:
+SUMMARISATION RULE (do this first):
+•  For every agenda item output ONE short clause (≈ 12 words or fewer) that a busy Mayor can absorb at a glance.
+•  Strip all "•" bullet characters, em-dashes, duplicate spaces, and line-breaks that appear inside the raw item text.
+•  Omit purely internal words such as "placeholder", "review", "start time", "moved from", etc.
+•  If either the title OR the notes already contain the word "TBD", output the line as "...: TBD" and NEVER append "- ADD DESCRIPTION".
+•  Otherwise, if notes contain "ADD DESCRIPTION" append exactly "- ADD DESCRIPTION".
 
-1.  Format: The output must be raw text only. Do not use any markdown like '##' or '**'.
-2.  Date Header: The report must start with the FULL month name followed by the day number, e.g. "August 25:".  NEVER use numeric-month abbreviations such as "25-Aug".  If there are meeting-level notes, place them in parentheses immediately after the date.
-3.  Sections: The report must BEGIN with EITHER "Study Session:" or "Closed Session:" depending on which type of item exists for that meeting date.
-        • If BOTH exist, list "Study Session:" first and "Closed Session:" second.
-        • If neither exists, start with the first section that does have items.
-    After the opening section(s) continue with the following in this order:
-        "Special Presentations:"
-        "Consent:"
-        "Consideration or Public Hearing:"
-        (Do not include a section header that has no items, unless you need to write "TBD" for that section.)
-4.  Bullet Points:
-    - CRITICAL: Each individual agenda item provided to you MUST be on its own new line in the output.
-    - Every item's line must start with a single hyphen and a space: "- ". Do NOT use other bullet point characters like '•' to start off a new line.
-    - If a section has no items, write "TBD" right after the section name. Example: "Closed Session: TBD"
-5.  Item Summarization Rules:
-    - Summarize each agenda item in ONE short clause (≈ 12 words or fewer) that clearly signals what the item is.  Omit internal workflow words such as "placeholder", "start time", review notes, and remove every "•" character.  This is for the Mayor’s quick scan.
-    - If an item has multiple details or notes (e.g., a placeholder status), combine them on the same line. You can use parentheses () or semicolons ; for this. Example line: "- VRBO Voluntary Collection Agreement (placeholder; move to future agenda)"
-    - DO NOT leave different agenda items in the same line, or split the same agenda item across different lines!
-    - If an item's notes include "• ADD DESCRIPTION", you must append " - ADD DESCRIPTION" to the end of that item's summary line. Do not create a new line for it. Example line: "- Suicide Prevention Month - ADD DESCRIPTION"
+After cleaning and summarising, follow these additional formatting rules:
 
-Here are some examples of the desired output format:
+1. Format: Output must be plain text – no Markdown, no asterisks.
+2. Date header: Start each meeting block with "<Full Month Name> <Day>:", e.g. "August 25:". Never use "25-Aug". If there are whole-meeting notes, place them in parentheses after the date.
+3. Section order:
+   a) Begin with "Study Session:" or "Closed Session:" (whichever exists; if both, Study first).
+   b) Then always list, in this exact sequence:
+      "Special Presentations:"
+      "Consent:"
+      "Consideration or Public Hearing:"
+   c) Do not print a section header that has no items unless you write "TBD". Example: "Closed Session: TBD".
+4. Bullet points: Every agenda item line must begin "- ". Never start a new line with "•". Never put two items on one line or split one item across lines.
 
+Examples of the desired output
+───────────────────────────────
 Example 1:
 June 23: (Sue remote, Christine will Chair)
 Closed Session: TBD
@@ -163,9 +161,9 @@ Special Presentations:
 - Joann Arnos, OSPAC Years of Service
 Consent:
 - Annual POs/Agreements over $75K PWD-Wastewater
-- Labor MOUs (placeholder)
-- Sewer service charges for FY2025-26 (last year of approved 5-year schedule)
-- VRBO Voluntary Collection Agreement (placeholder; Move to future agenda)
+- Labor MOUs
+- Sewer service charges for FY2025-26 (final year of 5-year schedule)
+- VRBO Voluntary Collection Agreement (move to future agenda)
 Consideration or Public Hearing:
 - STR Ordinance Update Introduction
 - Continued Consideration of Climate Action and Resilience Plan Adoption
@@ -175,7 +173,7 @@ August 5:
 Closed Session: TBD
 Special Presentations: TBD
 Consent:
-- Resolution for park naming - ADD DESCRIPTION
+- Resolution for park naming – ADD DESCRIPTION
 Consideration or Public Hearing: TBD
 
 Example 4 (Meeting that includes both a Closed Session and Study Session):
@@ -188,20 +186,8 @@ Consent:
 - Bi-Weekly Disbursements approval
 Consideration or Public Hearing: TBD
 
-NEGATIVE Example (DO NOT DO THIS - lots of bad '•' usage, and too-long descriptions, and sloppy '-' dashes):
-25-Aug:
-Closed Session: CLOSED SESSION - TBD • ADD DESCRIPTION - per K.Woodhouse 6/3
-Special Presentations:
-- City Staff New Hires (Semi-Annual Update) (placeholder) - moved from 6/23 to 8/25 per Y.Carter; HR to provide List of New Hires to K.Woodhouse for review
-- Proclamation - Suicide Prevention Month - September 2025 (placeholder) - ADD DESCRIPTION
-- Proclamation - National Preparedness Month - September 2025 (placeholder) - ADD DESCRIPTION
-Consideration or Public Hearing:
-- Housing Element Rezoning EIR Certification + Ordinance Introduction (possibly continued from 8/11) • Final Certification of EIR for Housing Element General Plan Amendments, Rezoning, and Objective Development Standards; Adoption of General Plan amendments; Introduction of Rezoning Ordinance - CAO Review: K.Murphy; To PC 5/19 & 7/7 mtg before going to Council
-- Resolution to Amend Council Rules & Code of Ethics to Change City Council Meeting Start Time to 6:00 PM & adopt other outcomes / direction from Council Governance Training (e.g. Vice Mayor nomenclature) • ADD DESCRIPTION - moved from 6/23 per K.Woodhouse; note: Municipal Code refers to Council Rules & Code of Ethics for regular meeting dates / start time and manner of conducting City Council meetings
-Public Hearing: Housing Element Rezoning EIR Certification + Ordinance Introduction (possibly continued from 8/11)
-Study Session on Revenue Generation (Title TBD from K. Woodhouse) • ADD DESCRIPTION - per K.Woodhouse 6/3
-
-Now, generate a report for the following meeting date based on the items provided below. Remember to place each item on a new line and to summarize each item to a few sentences.
+───────────────────────────────
+Now, using the rules above, generate a report for the meeting below.
 
 Meeting Date: {meeting_date}
 
@@ -801,7 +787,7 @@ All logos and trademarks are the property of their respective owners."""
                 
                 prompt = PROMPT_TEMPLATE.format(meeting_date=date, items_text=items_text.strip())
                 # Toggle Thinking
-                self.disable_thinking = False
+                self.disable_thinking = True
                 if self.disable_thinking:
                     prompt = prompt + " /no_think"
                     # Also adjust temperature per documentation recommendations
