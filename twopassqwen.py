@@ -121,68 +121,47 @@ You have recieved a set of summarized items. You are to categorize them and prop
 Follow these rules strictly:
 1.  Format: The output must be raw text only. Do not use any markdown like '##' or '**'.
 2.  Date Header: The report must start with the FULL month name followed by the day number, e.g. "January 1:".  NEVER use numeric-month abbreviations such as "1-Jan".  If there are meeting-level notes, place them in parentheses immediately after the date.
-3.  Sections: The report must BEGIN with EITHER "Study Session:" or "Closed Session:" depending on which type of item exists for that meeting date.
-        • If BOTH exist, list "Study Session:" first and "Closed Session:" second.
-        • If neither exists, omit them and start with the first section that does have items.
-    After the opening section(s) continue with these sections which MUST be included, and in the following order:
+3.  Sections: The report MUST CONTAIN each of these headers, and in the following order:
+        "Study Session:"
+        "Closed Session:"
         "Special Presentations:"
         "Consent:"
         "Consideration or Public Hearing:"
-    If a section has no items, write "TBD" right after the section name. Example: "Closed Session: TBD" or "Consent: TBD"
+    If a section has no items, write "TBD" right after the section name. Example: "Study Session: TBD" or "Closed Session: TBD" or "Special Presentations: TBD" or "Consent: TBD" or "Consideration or Public Hearing: TBD".
 4.  Item Bullet Points:
     - CRITICAL: Each individual agenda item provided to you MUST be on its own new line in the output.
     - Every item's line must start with a single hyphen and a space: "- ". Do NOT use other bullet point characters like '•' to start off a new line.
 
 Here are some examples of the desired output format:
 
-Example 1:
-June 23:
+Absolutely—here’s a revised “minimal-but-complete” example set.  Between these two samples every rule (date header format, mandatory section headers in proper order, bullets, standalone items, TBD handling, and “ADD DESCRIPTION” placeholders) is demonstrated.
+
+Example 1 (full mix, including a populated Study Session)
+September 10:
+Study Session:
+- Joint Study Session on Revenue Options – ADD DESCRIPTION
 Closed Session: TBD
-Special Presentations:
-- Parks Make Life Better Month
+Special Presentations: TBD
 Consent:
-- Childcare site lease agreement with Pacifica School District
-- New Operating Agreement with PRC for TSPP
-- Design Services Agreement for FY26-27 Pavement Resurfacing Project
-- Recertification of Sewer System Management Plan (State law requirement)
+- Bi-Weekly Disbursements approval
+- Approval of Minutes for 1/1/2025 City Council Meeting
 Consideration or Public Hearing:
 - FY 2025-26 Budget Adoption
-- Annual position vacancy, recruitment and retention report (State law requirement AB2561)
-- Introduction of Ordinance Changing Council Meeting start-time and formal adoption of other Governance Training outcomes
+- Introduction of Ordinance Changing Council Meeting start-time
 
-Example 2:
+Example 2 (showing sections that are entirely TBD and an item needing a description)
 July 14:
+Study Session: TBD
 Closed Session: TBD
 Special Presentations:
 - Joann Arnos, OSPAC Years of Service
 Consent:
 - Annual POs/Agreements over $75K PWD-Wastewater
-- Labor MOUs (placeholder)
-- Sewer service charges for FY2025-26 (last year of approved 5-year schedule)
-- VRBO Voluntary Collection Agreement (placeholder; Move to future agenda)
-Consideration or Public Hearing:
-- STR Ordinance Update Introduction
-- Continued Consideration of Climate Action and Resilience Plan Adoption
-
-Example 3 (Handling pending descriptions and TBDs):
-August 5:
-Closed Session: TBD
-Special Presentations: TBD
-Consent:
-- Resolution for park naming - ADD DESCRIPTION
+- Sewer Service Charges for FY 2025-26 (last year of approved 5-year schedule)
+- Resolution for Park Naming – ADD DESCRIPTION
 Consideration or Public Hearing: TBD
 
-Example 4 (Meeting that includes both a Closed Session and Study Session):
-September 10:
-Study Session:
-- Joint Study Session on Revenue Options - ADD DESCRIPTION
-Closed Session: TBD
-Special Presentations: TBD
-Consent:
-- Bi-Weekly Disbursements approval
-Consideration or Public Hearing: TBD
-
-NEGATIVE Example (DO NOT DO THIS: lots of bad bullet '•' usage, too-long run-on descriptions, incorrect date format):
+NEGATIVE Example (demonstrates what NOT to do — wrong bullets, bad date format, overly long descriptions, mixed dashes, misplaced headers):
 25-Aug:
 Closed Session: CLOSED SESSION - TBD • ADD DESCRIPTION - per K.Woodhouse 6/3
 Special Presentations:
@@ -195,11 +174,11 @@ Consideration or Public Hearing:
 Public Hearing: Housing Element Rezoning EIR Certification + Ordinance Introduction (possibly continued from 8/11)
 Study Session on Revenue Generation (Title TBD from K. Woodhouse) • ADD DESCRIPTION - per K.Woodhouse 6/3
 
-Now, generate a report for the following meeting date based on the items provided below. Remember to place each item on a new line and to summarize each item to a few sentences.
+Now, using the examples and negative example and given agenda items, generate a report for the following meeting date based on the items provided below. IMPORTANT: List each item under the CORRECT categories, and format the entire agenda CAREFULLY!
 
 Meeting Date: {meeting_date} - IMPORTANT: THIS IS THE ACTUAL METING DATE FOR YOUR REPORT!!!
 
-Agenda Items (pre-sorted by section):
+Agenda Items:
 {items_text}
 
 Report:
@@ -797,21 +776,25 @@ Chatbot icon created by juicy_fish - Flaticon."""
                 # --- START: TWO-PASS GENERATION ---
 
                 # PASS 1: Generate line-by-line summaries
-                summarization_prompt = f"""You are an expert city clerk. Your task is to summarize each agenda item into ONE short clause (around 15 words or fewer).
+                summarization_prompt = f"""You are an expert city clerk. Your task is to summarize each agenda item into ONE short clause (around 15 words or fewer). Don't waste time counting words too hard though.
 
 Rules for summarization:
 - Summarize each agenda item in ONE short clause that clearly signals what the item is
-- You MUST omit unnecessary internal workflow words such as "placeholder", "start time", "review notes", and "per [person]". DO NOT say "per Y.Carter" or "per K.Woodhouse" or anything.
+- You MUST omit unnecessary internal workflow words such as "moved from [dates]", and "per [person]". DO NOT say "moved from 1/1 to 12/31 per Y.Carter" or "per K.Woodhouse" or such.
 - Remove characters that would not work well for reading within the item like all "•" characters
-- If an item has multiple details, combine them using parentheses () or semicolons ; ONLY, do not use "•"
-- If an item's notes include "• ADD DESCRIPTION", delete it and append " - ADD DESCRIPTION" to the end
+- If an item has multiple details, combine them using parentheses "()" or semicolons ";" ONLY, do not use bullets "•"
+- If an item includes "placeholder", append "(placeholder)" with no other unnecessary placeholder details to the end
+- If an item include "ADD DESCRIPTION", delete it and append " - ADD DESCRIPTION" to the end, after any potential "placeholder"
 - The summaries should be prepended by which category they belong in: "Study Session:" or "Closed Session:" or "Special Presentations:" or "Consent:" or "Consideration or Public Hearing:".
+- Each summary title must use Title Case (capitalize all principal words), for example: "Approval of Minutes for 1/1/2025 Meeting"
+- If an agenda item includes a date range in mm/dd/yyyy format, preserve that exact format for conciseness; only the meeting date header should be written out in full word form.
 
 Some good examples:
 - Special Presentations: Proclamation - Suicide Prevention Month - September 2025 - ADD DESCRIPTION
 - Closed Study: TBD
 - Study Session: Study Session on Revenue Generation - ADD DESCRIPTION
-- Special Presentations: City Staff New Hires (Semi-Annual Update) - moved from 6/23 to 8/25 per Y.Carter
+- Meeting Date: December 31
+- Special Presentations: City Staff New Hires (Semi-Annual Update)
 - Consent: Annual POs/Agreements over $75K PWD-Wastewater
 - Consent: Sewer service charges for FY2025-26 (last year of approved 5-year schedule)
 - Consideration or Public Hearing: Continued Consideration of Climate Action and Resilience Plan Adoption
@@ -822,7 +805,7 @@ Agenda Items to Summarize:
 {items_text.strip()}
 
 IMPORTANT: Note you only have a 1000 token limit before you must create an output, so don't think in circles and just generate summaries and output when they look decent. Save tokens and decide on a summary per line quickly without overthinking.
-Provide ONLY the proper meeting date format and then the summarized lines, capitalized and prepended properly, one per line: /think"""
+Provide the proper "Meeting Date: " format on the first line and then provide the summarized lines one by one on seperate lines, each CAREFULLY capitalized and prepended properly: /think"""
                 
                 print("\n--- PASS 1: SUMMARIZATION ---")
                 summarization_stream = self.llm_model.create_chat_completion(
