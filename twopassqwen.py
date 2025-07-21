@@ -11,13 +11,11 @@ from docx import Document
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import tkinter as tk
-from tkinter import filedialog, messagebox
-from tkinter import ttk
+from tkinter import filedialog, messagebox, ttk
 from PIL import Image
 import os
 from datetime import datetime
 import threading
-from tkinter import ttk
 import traceback
 import sys
 import time
@@ -358,7 +356,7 @@ class AgendaSummaryGenerator(ctk.CTk):
             text_color=self.text_color,
             wraplength=550
         )
-        drop_label.pack(pady=(80, 20))
+        drop_label.pack(pady=(80, 20), padx=20)
         
         # Upload button
         upload_btn = ctk.CTkButton(
@@ -542,29 +540,32 @@ class AgendaSummaryGenerator(ctk.CTk):
 
         self.tree = ttk.Treeview(
             tree_container,
-            columns=("Section", "Item", "Notes"),
+            columns=("Date", "Section", "Item", "Notes"),
             show="headings",
             selectmode="extended" # Allows multiple selections
         )
 
         # Define headings
+        self.tree.heading("Date", text="Meeting Date", anchor='w')
         self.tree.heading("Section", text="Section", anchor='w')
         self.tree.heading("Item", text="Agenda Item", anchor='w')
         self.tree.heading("Notes", text="Notes", anchor='w')
 
         # Define column properties
+        self.tree.column("Date", width=100, stretch=False, anchor='w')
         self.tree.column("Section", width=180, stretch=False, anchor='w')
-        self.tree.column("Item", width=500, stretch=True, anchor='w')
+        self.tree.column("Item", width=400, stretch=True, anchor='w')
         self.tree.column("Notes", width=350, stretch=True, anchor='w')
 
         # Populate treeview with data
         for i, item in enumerate(self.filtered_items):
             # Clean up data for display
+            date = str(item.get('MEETING DATE', 'N/A'))
             section = str(item.get('AGENDA SECTION', 'N/A')).replace('\n', ' ')
             agenda_item = str(item.get('AGENDA ITEM', 'N/A')).replace('\n', ' ')
             notes = str(item.get('NOTES', '')).replace('\n', ' ')
             # Use index 'i' as the unique item identifier (iid)
-            self.tree.insert("", "end", values=(section, agenda_item, notes), iid=str(i))
+            self.tree.insert("", "end", values=(date, section, agenda_item, notes), iid=str(i))
 
         # Add a scrollbar that works with mouse/trackpad
         scrollbar = ttk.Scrollbar(tree_container, orient="vertical", command=self.tree.yview)
@@ -592,7 +593,8 @@ class AgendaSummaryGenerator(ctk.CTk):
                     self.tree.selection_remove(row_id)
                 else:
                     self.tree.selection_add(row_id)
-            
+            return "break"
+        
     def create_help_view(self):
         """Create the Help view"""
         help_frame = self.views["Help"]
@@ -841,8 +843,8 @@ Chatbot icon created by juicy_fish - Flaticon."""
 Rules for summarization:
 - Summarize each agenda item in ONE short clause that clearly signals what the item is
 - You MUST omit unnecessary internal workflow words such as "moved from [dates]", and "per [person]". DO NOT say "moved from 1/1 to 12/31 per Y.Carter" or "per K.Woodhouse" or such.
-- Remove characters that would not work well for reading within the item like all "•" characters
-- If an item has multiple details, combine them using parentheses "()" or semicolons ";" ONLY, do not use bullets "•"
+- Remove characters that would not work well for reading within the item like all "•" bullet characters
+- If an item has multiple details, combine them using "()" parentheses or ";" semicolons ONLY, DO NOT USE "•" bullets
 - If an item includes "placeholder", append "(placeholder)" with no other unnecessary placeholder details to the end
 - If an item include "ADD DESCRIPTION", delete it and append " - ADD DESCRIPTION" to the end, after any potential "placeholder"
 - The summaries should be prepended by which category they belong in: "Study Session:" or "Closed Session:" or "Special Presentations:" or "Consent:" or "Consideration or Public Hearing:".
@@ -850,10 +852,10 @@ Rules for summarization:
 - If an agenda item includes a date range in mm/dd/yyyy format, preserve that exact format for conciseness; only the meeting date header should be written out in full word form.
 
 Some good examples:
-- Special Presentations: Proclamation - Suicide Prevention Month - September 2025 - ADD DESCRIPTION
-- Closed Study: TBD
+- Meeting Date: December 31
+- Closed Study: Closed Study TBD
 - Study Session: Study Session on Revenue Generation - ADD DESCRIPTION
-- Special Presentations: City Staff New Hires (Semi-Annual Update) - moved from 6/23 to 8/25 per Y.Carter
+- Special Presentations: City Staff New Hires (Semi-Annual Update)
 - Consent: Annual POs/Agreements over $75K PWD-Wastewater
 - Consent: Sewer service charges for FY2025-26 (last year of approved 5-year schedule)
 - Consideration or Public Hearing: Continued Consideration of Climate Action and Resilience Plan Adoption
