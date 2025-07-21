@@ -11,12 +11,11 @@ from docx import Document
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 from PIL import Image
 import os
 from datetime import datetime
 import threading
-from tkinter import ttk
 import traceback
 import sys
 import time
@@ -221,7 +220,7 @@ class AgendaSummaryGenerator(ctk.CTk):
         # Data storage
         self.csv_data = None
         self.filtered_items = []
-        self.selected_items = {}
+        self.tree = None # Replaces self.selected_items
         self.llm_model = None
         self.generated_report_text = ""
         self.meeting_dates_for_report = []
@@ -289,11 +288,22 @@ class AgendaSummaryGenerator(ctk.CTk):
         
     def show_view(self, view_name):
         """Show the selected view and hide others"""
-        for name, view in self.views.items():
-            if name == view_name:
-                view.pack(fill="both", expand=True)
-            else:
-                view.pack_forget()
+        # If going "Home" from nav, always reset to the initial upload screen.
+        if view_name == "Home":
+            for name, view in self.views.items():
+                if name != "Home":
+                    view.pack_forget()
+            self.views["Home"].pack(fill="both", expand=True)
+            # Ensure the upload state is shown and others are hidden within Home
+            self.review_state.pack_forget()
+            self.generation_state.pack_forget()
+            self.upload_state.pack(fill="both", expand=True)
+        else:
+            for name, view in self.views.items():
+                if name == view_name:
+                    view.pack(fill="both", expand=True)
+                else:
+                    view.pack_forget()
                 
     def create_home_view(self):
         """Create the Home view with Upload and Review states"""
@@ -333,11 +343,12 @@ class AgendaSummaryGenerator(ctk.CTk):
         # Drop area content
         drop_label = ctk.CTkLabel(
             drop_frame,
-            text="Drag and Drop your .csv file here",
-            font=ctk.CTkFont(size=24, weight="bold"),
-            text_color=self.text_color
+            text="Drag & Drop not fully supported. Please use the button.",
+            font=ctk.CTkFont(size=20, weight="bold"),
+            text_color=self.text_color,
+            wraplength=550
         )
-        drop_label.pack(pady=(80, 20))
+        drop_label.pack(pady=(80, 20), padx=20)
         
         # Upload button
         upload_btn = ctk.CTkButton(
@@ -379,6 +390,19 @@ class AgendaSummaryGenerator(ctk.CTk):
         control_bar = ctk.CTkFrame(self.generation_state, fg_color=self.bg_color, height=60)
         control_bar.pack(fill="x", pady=(0, 20))
         control_bar.pack_propagate(False)
+
+        # Add a back button to go to review screen
+        back_btn = ctk.CTkButton(
+            control_bar,
+            text="Back to Review",
+            width=150,
+            height=40,
+            fg_color=self.accent_color,
+            hover_color=self.primary_color,
+            font=ctk.CTkFont(size=16),
+            command=self.back_to_review_state
+        )
+        back_btn.pack(side="left", padx=20)
         
         # Title
         title_label = ctk.CTkLabel(
@@ -413,6 +437,11 @@ class AgendaSummaryGenerator(ctk.CTk):
         )
         self.generation_textbox.pack(fill="both", expand=True, padx=20, pady=(0, 20))
 
+    def back_to_review_state(self):
+        """Go from generation screen back to review screen."""
+        self.generation_state.pack_forget()
+        self.review_state.pack(fill="both", expand=True)
+
     def create_review_state(self):
         """Create the review state UI"""
         # Clear existing content
@@ -423,6 +452,18 @@ class AgendaSummaryGenerator(ctk.CTk):
         control_bar = ctk.CTkFrame(self.review_state, fg_color=self.bg_color, height=60)
         control_bar.pack(fill="x", pady=(0, 20))
         control_bar.pack_propagate(False)
+
+        # Add Back button
+        back_btn = ctk.CTkButton(
+            control_bar,
+            text="Back to Home",
+            width=120,
+            height=30,
+            fg_color=self.accent_color,
+            hover_color=self.primary_color,
+            command=lambda: self.show_view("Home")
+        )
+        back_btn.pack(side="left", padx=10)
         
         # Item count label
         count_text = f"Review Items for Report ({len(self.filtered_items)} items found)"
@@ -469,70 +510,82 @@ class AgendaSummaryGenerator(ctk.CTk):
             command=self.deselect_all_items
         )
         deselect_all_btn.pack(side="right", padx=5)
-        
-        # Scrollable frame for items
-        self.scroll_frame = ctk.CTkScrollableFrame(
-            self.review_state,
-            fg_color="white",
-            corner_radius=10
+
+        # --- START: Treeview Implementation ---
+        # This replaces the slow, chunky CTkScrollableFrame of individual widgets
+        style = ttk.Style(self)
+        style.theme_use("default")
+        # Configure Treeview colors and row height for a compact look
+        style.configure("Treeview",
+                        background="white",
+                        foreground=self.text_color,
+                        fieldbackground="white",
+                        rowheight=25,
+                        font=ctk.CTkFont(size=11))
+        style.map('Treeview',
+                  background=[('selected', self.primary_color)],
+                  foreground=[('selected', 'white')])
+        style.configure("Treeview.Heading", font=ctk.CTkFont(size=12, weight="bold"))
+
+        tree_container = ctk.CTkFrame(self.review_state, fg_color="transparent")
+        tree_container.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+
+        self.tree = ttk.Treeview(
+            tree_container,
+            columns=("Date", "Section", "Item", "Notes"),
+            show="headings",
+            selectmode="extended" # Allows multiple selections
         )
-        self.scroll_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
-        
-        # Create item frames
-        self.selected_items = {}
+
+        # Define headings
+        self.tree.heading("Date", text="Meeting Date", anchor='w')
+        self.tree.heading("Section", text="Section", anchor='w')
+        self.tree.heading("Item", text="Agenda Item", anchor='w')
+        self.tree.heading("Notes", text="Notes", anchor='w')
+
+        # Define column properties
+        self.tree.column("Date", width=100, stretch=False, anchor='w')
+        self.tree.column("Section", width=180, stretch=False, anchor='w')
+        self.tree.column("Item", width=400, stretch=True, anchor='w')
+        self.tree.column("Notes", width=350, stretch=True, anchor='w')
+
+        # Populate treeview with data
         for i, item in enumerate(self.filtered_items):
-            self.create_item_frame(i, item)
+            # Clean up data for display
+            date = str(item.get('MEETING DATE', 'N/A'))
+            section = str(item.get('AGENDA SECTION', 'N/A')).replace('\n', ' ')
+            agenda_item = str(item.get('AGENDA ITEM', 'N/A')).replace('\n', ' ')
+            notes = str(item.get('NOTES', '')).replace('\n', ' ')
+            # Use index 'i' as the unique item identifier (iid)
+            self.tree.insert("", "end", values=(date, section, agenda_item, notes), iid=str(i))
+
+        # Add a scrollbar that works with mouse/trackpad
+        scrollbar = ttk.Scrollbar(tree_container, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+
+        # Pack everything
+        scrollbar.pack(side="right", fill="y")
+        self.tree.pack(side="left", fill="both", expand=True)
+
+        # Select all items by default on first load
+        self.select_all_items()
+
+        # Bind click to toggle selection for better UX
+        self.tree.bind("<Button-1>", self.on_tree_click)
+        # --- END: Treeview Implementation ---
             
-    def create_item_frame(self, index, item):
-        """Create a frame for each agenda item"""
-        item_frame = ctk.CTkFrame(
-            self.scroll_frame,
-            fg_color="#f0f0f0",
-            corner_radius=5,
-            height=80
-        )
-        item_frame.pack(fill="x", padx=10, pady=5)
-        item_frame.pack_propagate(False)
-        
-        # Checkbox
-        var = tk.BooleanVar(value=True)
-        self.selected_items[index] = var
-        
-        checkbox = ctk.CTkCheckBox(
-            item_frame,
-            text="",
-            variable=var,
-            width=20,
-            checkbox_width=20,
-            checkbox_height=20
-        )
-        checkbox.pack(side="left", padx=(10, 5), pady=10)
-        
-        # Content frame
-        content_frame = ctk.CTkFrame(item_frame, fg_color="#f0f0f0")
-        content_frame.pack(side="left", fill="both", expand=True, padx=(0, 10))
-        
-        # Meeting date
-        date_label = ctk.CTkLabel(
-            content_frame,
-            text=f"Meeting Date: {item['MEETING DATE']}",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            text_color=self.text_color,
-            anchor="w"
-        )
-        date_label.pack(anchor="w", pady=(10, 5))
-        
-        # Agenda item
-        agenda_text = str(item['AGENDA ITEM'])[:150] + "..." if len(str(item['AGENDA ITEM'])) > 150 else str(item['AGENDA ITEM'])
-        agenda_label = ctk.CTkLabel(
-            content_frame,
-            text=agenda_text,
-            font=ctk.CTkFont(size=11),
-            text_color=self.text_color,
-            anchor="w",
-            wraplength=800
-        )
-        agenda_label.pack(anchor="w", pady=(0, 10))
+    def on_tree_click(self, event):
+        """Handle clicks on the treeview to select/deselect rows."""
+        region = self.tree.identify("region", event.x, event.y)
+        # Only toggle selection if a cell (not heading) is clicked
+        if region == "cell":
+            row_id = self.tree.identify_row(event.y)
+            if self.tree.exists(row_id):
+                if row_id in self.tree.selection():
+                    self.tree.selection_remove(row_id)
+                else:
+                    self.tree.selection_add(row_id)
+            return "break"
         
     def create_help_view(self):
         """Create the Help view"""
@@ -681,13 +734,14 @@ Chatbot icon created by juicy_fish - Flaticon."""
         
     def select_all_items(self):
         """Select all items in the review list"""
-        for var in self.selected_items.values():
-            var.set(True)
+        if self.tree:
+            children = self.tree.get_children()
+            self.tree.selection_set(children)
             
     def deselect_all_items(self):
         """Deselect all items in the review list"""
-        for var in self.selected_items.values():
-            var.set(False)
+        if self.tree:
+            self.tree.selection_set()
             
     def load_llm_model(self):
         """Load the LLM model in background"""
@@ -710,18 +764,18 @@ Chatbot icon created by juicy_fish - Flaticon."""
         
     def generate_report(self):
         """Generate the report with LLM summaries"""
-        # Get selected items
-        selected_data = []
-        for idx, var in self.selected_items.items():
-            if var.get():
-                selected_data.append(self.filtered_items[idx])
-                
-        if not selected_data:
-            messagebox.showwarning(
-                "No Items Selected",
-                "Please select at least one item to generate a report."
-            )
+        # Get selected items from the Treeview
+        if not self.tree:
+            messagebox.showwarning("No Items Selected", "Please select at least one item to generate a report.")
             return
+
+        selected_iids = self.tree.selection()
+        if not selected_iids:
+            messagebox.showwarning("No Items Selected", "Please select at least one item to generate a report.")
+            return
+
+        # Map the selected iids (which are string indices) back to the original data
+        selected_data = [self.filtered_items[int(iid)] for iid in selected_iids]
             
         # Switch to generation view
         self.review_state.pack_forget()
@@ -781,8 +835,8 @@ Chatbot icon created by juicy_fish - Flaticon."""
 Rules for summarization:
 - Summarize each agenda item in ONE short clause that clearly signals what the item is
 - You MUST omit unnecessary internal workflow words such as "moved from [dates]", and "per [person]". DO NOT say "moved from 1/1 to 12/31 per Y.Carter" or "per K.Woodhouse" or such.
-- Remove characters that would not work well for reading within the item like all "•" characters
-- If an item has multiple details, combine them using parentheses "()" or semicolons ";" ONLY, do not use bullets "•"
+- Remove characters that would not work well for reading within the item like all "•" bullet characters
+- If an item has multiple details, combine them using "()" parentheses or ";" semicolons ONLY, DO NOT USE "•" bullets
 - If an item includes "placeholder", append "(placeholder)" with no other unnecessary placeholder details to the end
 - If an item include "ADD DESCRIPTION", delete it and append " - ADD DESCRIPTION" to the end, after any potential "placeholder"
 - The summaries should be prepended by which category they belong in: "Study Session:" or "Closed Session:" or "Special Presentations:" or "Consent:" or "Consideration or Public Hearing:".
@@ -790,10 +844,9 @@ Rules for summarization:
 - If an agenda item includes a date range in mm/dd/yyyy format, preserve that exact format for conciseness; only the meeting date header should be written out in full word form.
 
 Some good examples:
-- Special Presentations: Proclamation - Suicide Prevention Month - September 2025 - ADD DESCRIPTION
-- Closed Study: TBD
-- Study Session: Study Session on Revenue Generation - ADD DESCRIPTION
 - Meeting Date: December 31
+- Closed Study: Closed Study TBD
+- Study Session: Study Session on Revenue Generation - ADD DESCRIPTION
 - Special Presentations: City Staff New Hires (Semi-Annual Update)
 - Consent: Annual POs/Agreements over $75K PWD-Wastewater
 - Consent: Sewer service charges for FY2025-26 (last year of approved 5-year schedule)
