@@ -12,6 +12,7 @@ from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import tkinter as tk
 from tkinter import filedialog, messagebox
+from tkinter import ttk
 from PIL import Image
 import os
 from datetime import datetime
@@ -121,64 +122,72 @@ You have recieved a set of summarized items. You are to categorize them and prop
 Follow these rules strictly:
 1.  Format: The output must be raw text only. Do not use any markdown like '##' or '**'.
 2.  Date Header: The report must start with the FULL month name followed by the day number, e.g. "January 1:".  NEVER use numeric-month abbreviations such as "1-Jan".  If there are meeting-level notes, place them in parentheses immediately after the date.
-3.  Sections: The report MUST CONTAIN each of these headers, and in the following order:
-        "Study Session:"
-        "Closed Session:"
+3.  Sections: The report must BEGIN with EITHER "Study Session:" or "Closed Session:" depending on which type of item exists for that meeting date.
+        • If BOTH exist, list "Study Session:" first and "Closed Session:" second.
+        • If neither exists, omit them and start with the first section that does have items.
+    After the opening section(s) continue with these sections which MUST be included, and in the following order:
         "Special Presentations:"
         "Consent:"
         "Consideration or Public Hearing:"
-    If a section has no items, write "TBD" right after the section name. Example: "Study Session: TBD" or "Closed Session: TBD" or "Special Presentations: TBD" or "Consent: TBD" or "Consideration or Public Hearing: TBD".
+    If a section has no items, write "TBD" right after the section name. Example: "Closed Session: TBD" or "Consent: TBD"
 4.  Item Bullet Points:
     - CRITICAL: Each individual agenda item provided to you MUST be on its own new line in the output.
     - Every item's line must start with a single hyphen and a space: "- ". Do NOT use other bullet point characters like '•' to start off a new line.
 
 Here are some examples of the desired output format:
 
-Absolutely—here’s a revised “minimal-but-complete” example set.  Between these two samples every rule (date header format, mandatory section headers in proper order, bullets, standalone items, TBD handling, and “ADD DESCRIPTION” placeholders) is demonstrated.
-
-Example 1 (full mix, including a populated Study Session)
-September 10:
-Study Session:
-- Joint Study Session on Revenue Options – ADD DESCRIPTION
+Example 1:
+June 23:
 Closed Session: TBD
-Special Presentations: TBD
+Special Presentations:
+- Parks Make Life Better Month
 Consent:
-- Bi-Weekly Disbursements approval
-- Approval of Minutes for 1/1/2025 City Council Meeting
+- Childcare site lease agreement with Pacifica School District
+- New Operating Agreement with PRC for TSPP
+- Design Services Agreement for FY26-27 Pavement Resurfacing Project
+- Recertification of Sewer System Management Plan (State law requirement)
 Consideration or Public Hearing:
 - FY 2025-26 Budget Adoption
-- Introduction of Ordinance Changing Council Meeting start-time
+- Annual position vacancy, recruitment and retention report (State law requirement AB2561)
+- Introduction of Ordinance Changing Council Meeting start-time and formal adoption of other Governance Training outcomes
 
-Example 2 (showing sections that are entirely TBD and an item needing a description)
+Example 2:
 July 14:
-Study Session: TBD
 Closed Session: TBD
 Special Presentations:
 - Joann Arnos, OSPAC Years of Service
 Consent:
 - Annual POs/Agreements over $75K PWD-Wastewater
-- Sewer Service Charges for FY 2025-26 (last year of approved 5-year schedule)
-- Resolution for Park Naming – ADD DESCRIPTION
+- Labor MOUs (placeholder)
+- Sewer service charges for FY2025-26 (last year of approved 5-year schedule)
+- VRBO Voluntary Collection Agreement (placeholder)
+Consideration or Public Hearing:
+- STR Ordinance Update Introduction
+- Continued Consideration of Climate Action and Resilience Plan Adoption
+
+Example 3 (Handling pending descriptions and TBDs):
+August 5:
+Closed Session: TBD
+Special Presentations: TBD
+Consent:
+- Resolution for park naming - ADD DESCRIPTION
 Consideration or Public Hearing: TBD
 
-NEGATIVE Example (demonstrates what NOT to do — wrong bullets, bad date format, overly long descriptions, mixed dashes, misplaced headers):
-25-Aug:
-Closed Session: CLOSED SESSION - TBD • ADD DESCRIPTION - per K.Woodhouse 6/3
-Special Presentations:
-- City Staff New Hires (Semi-Annual Update) (placeholder) - moved from 6/23 to 8/25 per Y.Carter; HR to provide List of New Hires to K.Woodhouse for review
-- Proclamation - Suicide Prevention Month - September 2025 (placeholder) - ADD DESCRIPTION
-- Proclamation - National Preparedness Month - September 2025 (placeholder) - ADD DESCRIPTION
-Consideration or Public Hearing:
-- Housing Element Rezoning EIR Certification + Ordinance Introduction (possibly continued from 8/11) • Final Certification of EIR for Housing Element General Plan Amendments, Rezoning, and Objective Development Standards; Adoption of General Plan amendments; Introduction of Rezoning Ordinance - CAO Review: K.Murphy; To PC 5/19 & 7/7 mtg before going to Council
-- Resolution to Amend Council Rules & Code of Ethics to Change City Council Meeting Start Time to 6:00 PM & adopt other outcomes / direction from Council Governance Training (e.g. Vice Mayor nomenclature) • ADD DESCRIPTION - moved from 6/23 per K.Woodhouse; note: Municipal Code refers to Council Rules & Code of Ethics for regular meeting dates / start time and manner of conducting City Council meetings
-Public Hearing: Housing Element Rezoning EIR Certification + Ordinance Introduction (possibly continued from 8/11)
-Study Session on Revenue Generation (Title TBD from K. Woodhouse) • ADD DESCRIPTION - per K.Woodhouse 6/3
+Example 4 (Meeting that includes both a Closed Session and Study Session):
+September 10:
+Study Session:
+- Joint Study Session on Revenue Options - ADD DESCRIPTION
+Closed Session: TBD
+Special Presentations: TBD
+Consent:
+- Bi-Weekly Disbursements approval
+Consideration or Public Hearing: TBD
 
-Now, using the examples and negative example and given agenda items, generate a report for the following meeting date based on the items provided below. IMPORTANT: List each item under the CORRECT categories, and format the entire agenda CAREFULLY!
+Now, generate a report for the following meeting date based on the items provided below. Remember to place each item on a new line and to summarize each item to a few sentences.
 
 Meeting Date: {meeting_date} - IMPORTANT: THIS IS THE ACTUAL METING DATE FOR YOUR REPORT!!!
 
-Agenda Items:
+Agenda Items (pre-sorted by section):
 {items_text}
 
 Report:
@@ -221,7 +230,7 @@ class AgendaSummaryGenerator(ctk.CTk):
         # Data storage
         self.csv_data = None
         self.filtered_items = []
-        self.selected_items = {}
+        self.tree = None # Replaces self.selected_items
         self.llm_model = None
         self.generated_report_text = ""
         self.meeting_dates_for_report = []
@@ -289,11 +298,22 @@ class AgendaSummaryGenerator(ctk.CTk):
         
     def show_view(self, view_name):
         """Show the selected view and hide others"""
-        for name, view in self.views.items():
-            if name == view_name:
-                view.pack(fill="both", expand=True)
-            else:
-                view.pack_forget()
+        # If going "Home" from nav, always reset to the initial upload screen.
+        if view_name == "Home":
+            for name, view in self.views.items():
+                if name != "Home":
+                    view.pack_forget()
+            self.views["Home"].pack(fill="both", expand=True)
+            # Ensure the upload state is shown and others are hidden within Home
+            self.review_state.pack_forget()
+            self.generation_state.pack_forget()
+            self.upload_state.pack(fill="both", expand=True)
+        else:
+            for name, view in self.views.items():
+                if name == view_name:
+                    view.pack(fill="both", expand=True)
+                else:
+                    view.pack_forget()
                 
     def create_home_view(self):
         """Create the Home view with Upload and Review states"""
@@ -333,9 +353,10 @@ class AgendaSummaryGenerator(ctk.CTk):
         # Drop area content
         drop_label = ctk.CTkLabel(
             drop_frame,
-            text="Drag and Drop your .csv file here",
-            font=ctk.CTkFont(size=24, weight="bold"),
-            text_color=self.text_color
+            text="Drag & Drop not fully supported. Please use the button.",
+            font=ctk.CTkFont(size=20, weight="bold"),
+            text_color=self.text_color,
+            wraplength=550
         )
         drop_label.pack(pady=(80, 20))
         
@@ -379,6 +400,19 @@ class AgendaSummaryGenerator(ctk.CTk):
         control_bar = ctk.CTkFrame(self.generation_state, fg_color=self.bg_color, height=60)
         control_bar.pack(fill="x", pady=(0, 20))
         control_bar.pack_propagate(False)
+
+        # Add a back button to go to review screen
+        back_btn = ctk.CTkButton(
+            control_bar,
+            text="Back to Review",
+            width=150,
+            height=40,
+            fg_color=self.accent_color,
+            hover_color=self.primary_color,
+            font=ctk.CTkFont(size=16),
+            command=self.back_to_review_state
+        )
+        back_btn.pack(side="left", padx=20)
         
         # Title
         title_label = ctk.CTkLabel(
@@ -413,6 +447,11 @@ class AgendaSummaryGenerator(ctk.CTk):
         )
         self.generation_textbox.pack(fill="both", expand=True, padx=20, pady=(0, 20))
 
+    def back_to_review_state(self):
+        """Go from generation screen back to review screen."""
+        self.generation_state.pack_forget()
+        self.review_state.pack(fill="both", expand=True)
+
     def create_review_state(self):
         """Create the review state UI"""
         # Clear existing content
@@ -423,6 +462,18 @@ class AgendaSummaryGenerator(ctk.CTk):
         control_bar = ctk.CTkFrame(self.review_state, fg_color=self.bg_color, height=60)
         control_bar.pack(fill="x", pady=(0, 20))
         control_bar.pack_propagate(False)
+
+        # Add Back button
+        back_btn = ctk.CTkButton(
+            control_bar,
+            text="Back to Home",
+            width=120,
+            height=30,
+            fg_color=self.accent_color,
+            hover_color=self.primary_color,
+            command=lambda: self.show_view("Home")
+        )
+        back_btn.pack(side="left", padx=10)
         
         # Item count label
         count_text = f"Review Items for Report ({len(self.filtered_items)} items found)"
@@ -469,71 +520,79 @@ class AgendaSummaryGenerator(ctk.CTk):
             command=self.deselect_all_items
         )
         deselect_all_btn.pack(side="right", padx=5)
-        
-        # Scrollable frame for items
-        self.scroll_frame = ctk.CTkScrollableFrame(
-            self.review_state,
-            fg_color="white",
-            corner_radius=10
+
+        # --- START: Treeview Implementation ---
+        # This replaces the slow, chunky CTkScrollableFrame of individual widgets
+        style = ttk.Style(self)
+        style.theme_use("default")
+        # Configure Treeview colors and row height for a compact look
+        style.configure("Treeview",
+                        background="white",
+                        foreground=self.text_color,
+                        fieldbackground="white",
+                        rowheight=25,
+                        font=ctk.CTkFont(size=11))
+        style.map('Treeview',
+                  background=[('selected', self.primary_color)],
+                  foreground=[('selected', 'white')])
+        style.configure("Treeview.Heading", font=ctk.CTkFont(size=12, weight="bold"))
+
+        tree_container = ctk.CTkFrame(self.review_state, fg_color="transparent")
+        tree_container.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+
+        self.tree = ttk.Treeview(
+            tree_container,
+            columns=("Section", "Item", "Notes"),
+            show="headings",
+            selectmode="extended" # Allows multiple selections
         )
-        self.scroll_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
-        
-        # Create item frames
-        self.selected_items = {}
+
+        # Define headings
+        self.tree.heading("Section", text="Section", anchor='w')
+        self.tree.heading("Item", text="Agenda Item", anchor='w')
+        self.tree.heading("Notes", text="Notes", anchor='w')
+
+        # Define column properties
+        self.tree.column("Section", width=180, stretch=False, anchor='w')
+        self.tree.column("Item", width=500, stretch=True, anchor='w')
+        self.tree.column("Notes", width=350, stretch=True, anchor='w')
+
+        # Populate treeview with data
         for i, item in enumerate(self.filtered_items):
-            self.create_item_frame(i, item)
+            # Clean up data for display
+            section = str(item.get('AGENDA SECTION', 'N/A')).replace('\n', ' ')
+            agenda_item = str(item.get('AGENDA ITEM', 'N/A')).replace('\n', ' ')
+            notes = str(item.get('NOTES', '')).replace('\n', ' ')
+            # Use index 'i' as the unique item identifier (iid)
+            self.tree.insert("", "end", values=(section, agenda_item, notes), iid=str(i))
+
+        # Add a scrollbar that works with mouse/trackpad
+        scrollbar = ttk.Scrollbar(tree_container, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+
+        # Pack everything
+        scrollbar.pack(side="right", fill="y")
+        self.tree.pack(side="left", fill="both", expand=True)
+
+        # Select all items by default on first load
+        self.select_all_items()
+
+        # Bind click to toggle selection for better UX
+        self.tree.bind("<Button-1>", self.on_tree_click)
+        # --- END: Treeview Implementation ---
             
-    def create_item_frame(self, index, item):
-        """Create a frame for each agenda item"""
-        item_frame = ctk.CTkFrame(
-            self.scroll_frame,
-            fg_color="#f0f0f0",
-            corner_radius=5,
-            height=80
-        )
-        item_frame.pack(fill="x", padx=10, pady=5)
-        item_frame.pack_propagate(False)
-        
-        # Checkbox
-        var = tk.BooleanVar(value=True)
-        self.selected_items[index] = var
-        
-        checkbox = ctk.CTkCheckBox(
-            item_frame,
-            text="",
-            variable=var,
-            width=20,
-            checkbox_width=20,
-            checkbox_height=20
-        )
-        checkbox.pack(side="left", padx=(10, 5), pady=10)
-        
-        # Content frame
-        content_frame = ctk.CTkFrame(item_frame, fg_color="#f0f0f0")
-        content_frame.pack(side="left", fill="both", expand=True, padx=(0, 10))
-        
-        # Meeting date
-        date_label = ctk.CTkLabel(
-            content_frame,
-            text=f"Meeting Date: {item['MEETING DATE']}",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            text_color=self.text_color,
-            anchor="w"
-        )
-        date_label.pack(anchor="w", pady=(10, 5))
-        
-        # Agenda item
-        agenda_text = str(item['AGENDA ITEM'])[:150] + "..." if len(str(item['AGENDA ITEM'])) > 150 else str(item['AGENDA ITEM'])
-        agenda_label = ctk.CTkLabel(
-            content_frame,
-            text=agenda_text,
-            font=ctk.CTkFont(size=11),
-            text_color=self.text_color,
-            anchor="w",
-            wraplength=800
-        )
-        agenda_label.pack(anchor="w", pady=(0, 10))
-        
+    def on_tree_click(self, event):
+        """Handle clicks on the treeview to select/deselect rows."""
+        region = self.tree.identify("region", event.x, event.y)
+        # Only toggle selection if a cell (not heading) is clicked
+        if region == "cell":
+            row_id = self.tree.identify_row(event.y)
+            if self.tree.exists(row_id):
+                if row_id in self.tree.selection():
+                    self.tree.selection_remove(row_id)
+                else:
+                    self.tree.selection_add(row_id)
+            
     def create_help_view(self):
         """Create the Help view"""
         help_frame = self.views["Help"]
@@ -681,13 +740,14 @@ Chatbot icon created by juicy_fish - Flaticon."""
         
     def select_all_items(self):
         """Select all items in the review list"""
-        for var in self.selected_items.values():
-            var.set(True)
+        if self.tree:
+            children = self.tree.get_children()
+            self.tree.selection_set(children)
             
     def deselect_all_items(self):
         """Deselect all items in the review list"""
-        for var in self.selected_items.values():
-            var.set(False)
+        if self.tree:
+            self.tree.selection_set()
             
     def load_llm_model(self):
         """Load the LLM model in background"""
@@ -710,18 +770,18 @@ Chatbot icon created by juicy_fish - Flaticon."""
         
     def generate_report(self):
         """Generate the report with LLM summaries"""
-        # Get selected items
-        selected_data = []
-        for idx, var in self.selected_items.items():
-            if var.get():
-                selected_data.append(self.filtered_items[idx])
-                
-        if not selected_data:
-            messagebox.showwarning(
-                "No Items Selected",
-                "Please select at least one item to generate a report."
-            )
+        # Get selected items from the Treeview
+        if not self.tree:
+            messagebox.showwarning("No Items Selected", "Please select at least one item to generate a report.")
             return
+
+        selected_iids = self.tree.selection()
+        if not selected_iids:
+            messagebox.showwarning("No Items Selected", "Please select at least one item to generate a report.")
+            return
+
+        # Map the selected iids (which are string indices) back to the original data
+        selected_data = [self.filtered_items[int(iid)] for iid in selected_iids]
             
         # Switch to generation view
         self.review_state.pack_forget()
@@ -793,8 +853,7 @@ Some good examples:
 - Special Presentations: Proclamation - Suicide Prevention Month - September 2025 - ADD DESCRIPTION
 - Closed Study: TBD
 - Study Session: Study Session on Revenue Generation - ADD DESCRIPTION
-- Meeting Date: December 31
-- Special Presentations: City Staff New Hires (Semi-Annual Update)
+- Special Presentations: City Staff New Hires (Semi-Annual Update) - moved from 6/23 to 8/25 per Y.Carter
 - Consent: Annual POs/Agreements over $75K PWD-Wastewater
 - Consent: Sewer service charges for FY2025-26 (last year of approved 5-year schedule)
 - Consideration or Public Hearing: Continued Consideration of Climate Action and Resilience Plan Adoption
@@ -805,7 +864,7 @@ Agenda Items to Summarize:
 {items_text.strip()}
 
 IMPORTANT: Note you only have a 1000 token limit before you must create an output, so don't think in circles and just generate summaries and output when they look decent. Save tokens and decide on a summary per line quickly without overthinking.
-Provide the proper "Meeting Date: " format on the first line and then provide the summarized lines one by one on seperate lines, each CAREFULLY capitalized and prepended properly: /think"""
+Provide ONLY the proper meeting date format and then the summarized lines, each CAREFULLY capitalized and prepended properly, one per line: /think"""
                 
                 print("\n--- PASS 1: SUMMARIZATION ---")
                 summarization_stream = self.llm_model.create_chat_completion(
