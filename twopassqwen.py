@@ -628,8 +628,9 @@ Project Organization & Coordination:
 Madeleine Hur
 
 Acknowledgements:
-This application utilizes open-source Large Language Models, defaulting to Qwen-3-4B and the llama-cpp-python library.
-All logos and trademarks are the property of their respective owners."""
+This application utilizes open-source Large Language Models along with the llama-cpp-python library.
+All logos and trademarks are the property of their respective owners.
+Chatbot icon created by juicy_fish - Flaticon."""
         
         credits_label = ctk.CTkLabel(
             center_frame,
