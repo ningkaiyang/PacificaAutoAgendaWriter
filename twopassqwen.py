@@ -136,7 +136,7 @@ Here are some examples of the desired output format:
 Example 1 (full mix, including a populated Study Session)
 September 10:
 Study Session:
-- Joint Study Session on Revenue Options – ADD DESCRIPTION
+- Joint Study Session on Revenue Options - ADD DESCRIPTION
 Closed Session: TBD
 Special Presentations: TBD
 Consent:
@@ -155,7 +155,7 @@ Special Presentations:
 Consent:
 - Annual POs/Agreements over $75K PWD-Wastewater
 - Sewer Service Charges for FY 2025-26 (last year of approved 5-year schedule)
-- Resolution for Park Naming – ADD DESCRIPTION
+- Resolution for Park Naming - ADD DESCRIPTION
 Consideration or Public Hearing: TBD
 
 NEGATIVE Example (demonstrates what NOT to do — bad bullet characters, bad date format, overly long descriptions, mixed dashes, misplaced headers, messy):
@@ -855,7 +855,7 @@ Rules for summarization:
 - If an item INCLUDES "placeholder", append "(placeholder)" with no other unnecessary placeholder details to the end
 - If an item INCLUDES " ADD DESCRIPTION", delete it and append " - ADD DESCRIPTION" to the end, after any potential "(placeholder)"
 - Each summary title must use Title Case (capitalize all principal words), for example: "Approval of Minutes for 1/1/2025 Meeting"
-- If an agenda item includes a date that is relevant to keep in summary, keep the date exactly as it appears; do not convert month names or add/remove leading zeros.
+- If an agenda item includes a non-placeholder date, keep the date exactly as it appears; do not convert month names or add/remove leading zeros. If it is part of a placeholder, delete it.
 - You are also allowed to split long items into seperate items if they would do well as concise seperate items.
 
 Some good examples:
