@@ -174,7 +174,7 @@ Study Session on Revenue Generation (Title TBD from K. Woodhouse) • ADD DESCRI
 
 Now, using the examples and negative example and given agenda items, generate a report for the following meeting date based on the items provided below. IMPORTANT: List each item under the CORRECT categories, and format the entire agenda CAREFULLY!
 
-<meeting_date>Meeting Date: {meeting_date}</meeting_date> - IMPORTANT: THIS IS THE ACTUAL METING DATE FOR YOUR REPORT!!!
+Meeting Date: {meeting_date} - IMPORTANT: THIS IS THE ACTUAL METING DATE FOR YOUR REPORT!!! Parse carefully, i.e. "8-Sep" = "September 8"!
 
 Agenda Items:
 <items_to_sort>
@@ -833,7 +833,7 @@ Chatbot icon created by juicy_fish - Flaticon."""
                     section = str(item.get('AGENDA SECTION', 'N/A')).replace('\n', ' ').replace('•', '-').strip()
                     agenda_item = str(item.get('AGENDA ITEM', 'N/A')).replace('\n', ' ').replace('•', '-').strip()
                     
-                    item_line = f"- Section: {section}, Item: \"{agenda_item}\""
+                    item_line = f"- Item: {agenda_item}, Section: \"{section}\""
                     
                     notes_val = item.get('NOTES')
                     if pd.notna(notes_val):
@@ -846,47 +846,47 @@ Chatbot icon created by juicy_fish - Flaticon."""
                 # --- START: TWO-PASS GENERATION ---
 
                 # PASS 1: Generate line-by-line summaries
-                summarization_prompt = f"""You are an expert city clerk. Your task is to summarize each agenda item into ONE short clause (around 15 words or fewer). DON'T waste time counting words.
+                summarization_prompt = f"""You are an expert city clerk. Your task is to summarize each agenda item into ONE short clause.
 
 Rules for summarization:
-- Summarize each agenda item in ONE short clause that clearly signals what the item is
+- Summarize each agenda item in ONE concise single clause as short and clean as possible that clearly signals what the item is. You can omit most parenthesized text from original inputs.
+- You should first figure out which category each item belongs in and prepend it to the item: "Study Session:" or "Closed Session:" or "Special Presentations:" or "Consent:" or "Consideration or Public Hearing:". IMPORTANT: ALL considerations OR public hearings go under "Consideration or Public Hearing:"
 - You MUST omit unnecessary internal workflow words such as "moved from [dates]", and "per [person]". DO NOT say "moved from 1/1 to 12/31 per Y.Carter" or "per K.Woodhouse" or such.
-- REMOVE characters that would not work well for reading on a document from the item, like remove all "•" bullet characters
-- If an item has multiple details, COMBINE them using "()" parentheses or ";" semicolons.
-- If an item is TBD, just write the category, then TBD, such as: "Closed Session: TBD".
 - If an item INCLUDES "placeholder", append "(placeholder)" with no other unnecessary placeholder details to the end
-- If an item INCLUDES " ADD DESCRIPTION", delete it and append " - ADD DESCRIPTION" to the end, after any potential "placeholder"
-- The summaries should be prepended by which category they belong in: "Study Session:" or "Closed Session:" or "Special Presentations:" or "Consent:" or "Consideration or Public Hearing:". IMPORTANT: ALL considerations OR public hearings go under "Consideration or Public Hearing:"
+- If an item INCLUDES " ADD DESCRIPTION", delete it and append " - ADD DESCRIPTION" to the end, after any potential "(placeholder)"
 - Each summary title must use Title Case (capitalize all principal words), for example: "Approval of Minutes for 1/1/2025 Meeting"
-- If an agenda item includes a date range in mm/dd/yyyy format, preserve that exact format for conciseness; only the meeting date header should be written out in full word form.
+- If an agenda item includes a date that is relevant to keep in summary, keep the date exactly as it appears; do not convert month names or add/remove leading zeros.
+- You are also allowed to split long items into seperate items if they would do well as concise seperate items.
 
 Some good examples:
 <examples>
-- Meeting Date: December 31
-- Closed Session: Closed Session: TBD - ADD DESCRIPTION
-- Study Session: Study Session on Revenue Generation - ADD DESCRIPTION
-- Special Presentations: City Staff New Hires (Semi-Annual Update)
-- Consent: Annual POs/Agreements over $75K PWD-Wastewater
-- Consent: Sewer service charges for FY2025-26 (last year of approved 5-year schedule)
-- Consideration or Public Hearing: Continued Consideration of Climate Action and Resilience Plan Adoption
+Meeting Date: December 31
+Closed Session: Closed Session: TBD - ADD DESCRIPTION
+Study Session: Study Session on Revenue Generation - ADD DESCRIPTION
+Special Presentations: City Staff New Hires (Semi-Annual Update)
+Consent: Annual POs/Agreements over $75K PWD-Wastewater
+Consideration or Public Hearing: Resolution to Establish Climate Action & Resilience Plan Implementation Committee per CAAP Task Force Charter
+Consent: Sewer service charges for FY2025-26 (last year of approved 5-year schedule)
+Consideration or Public Hearing: Continued Consideration of Climate Action and Resilience Plan Adoption
+
 </examples>
 
-<meeting_date>Meeting Date: {date}</meeting_date> - IMPORTANT! THIS IS THE ACTUAL MEETING DATE, KEEP TRACK OF IT CAREFULLY! Start off your summarization lines with this meeting date, parsed neatly as <Month Day> like "Meeting Date: January 1" or "Meeting Date: December 31".
+Meeting Date: {date} - IMPORTANT! THIS IS THE ACTUAL MEETING DATE, KEEP TRACK OF IT CAREFULLY! Start off your summarization lines with this meeting date, parsed neatly as <Month Day> like "Meeting Date: January 1" or "Meeting Date: December 31". Parse carefully, i.e. "8-Sep" = "Meeting Date: September 8"!
 
 Agenda Items to Summarize - ONLY SUMMARIZE THESE, DO NOT ADD IN FROM EXAMPLES ACCIDENTALLY:
 <summarize_these>
 {items_text.strip()}
 </summarize_these>
 
-IMPORTANT: Note you only have a 1000 token limit before you must create an output, so don't think in circles and just generate summaries and output when they look decent. Save tokens and decide on a summary per line quickly without overthinking.
+IMPORTANT: Do not explain your reasoning and think too much in circles; output the cleaned lines immediately.
 Provide ONLY the proper meeting date format and then the summarized lines, each CAREFULLY capitalized and prepended properly, one per line: /think"""
                 
                 print("\n--- PASS 1: SUMMARIZATION ---")
                 summarization_stream = self.llm_model.create_chat_completion(
                     messages=[{"role": "user", "content": summarization_prompt}],
-                    max_tokens=4000,  # limited tokens for focused summarization
-                    temperature=0,  # lower temperature for more consistent summaries
-                    top_p=0.95,
+                    max_tokens=4000,
+                    temperature=0,
+                    top_p=0.01,
                     top_k=20,
                     stream=True,
                 )
@@ -917,8 +917,8 @@ Provide ONLY the proper meeting date format and then the summarized lines, each 
                 format_stream = self.llm_model.create_chat_completion(
                     messages=[{"role": "user", "content": format_prompt}],
                     max_tokens=4000,
-                    temperature=0,  # low temperature for consistent formatting
-                    top_p=0.95,
+                    temperature=0,
+                    top_p=0.01,
                     top_k=20,
                     stream=True,
                 )
