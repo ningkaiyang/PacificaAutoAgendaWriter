@@ -860,15 +860,14 @@ Rules for summarization:
 
 Some good examples:
 <examples>
-Meeting Date: December 31
-Closed Session: Closed Session: TBD - ADD DESCRIPTION
+Closed Session: TBD - ADD DESCRIPTION
 Study Session: Study Session on Revenue Generation - ADD DESCRIPTION
 Special Presentations: City Staff New Hires (Semi-Annual Update)
 Consent: Annual POs/Agreements over $75K PWD-Wastewater
 Consideration or Public Hearing: Resolution to Establish Climate Action & Resilience Plan Implementation Committee per CAAP Task Force Charter
 Consent: Sewer service charges for FY2025-26 (last year of approved 5-year schedule)
 Consideration or Public Hearing: Continued Consideration of Climate Action and Resilience Plan Adoption
-
+Consent: Approval of Minutes for 1/1/2024 City Council Meeting
 </examples>
 
 Meeting Date: {date} - IMPORTANT! THIS IS THE ACTUAL MEETING DATE, KEEP TRACK OF IT CAREFULLY! Start off your summarization lines with this meeting date, parsed neatly as <Month Day> like "Meeting Date: January 1" or "Meeting Date: December 31". Parse carefully, i.e. "8-Sep" = "Meeting Date: September 8"!
