@@ -142,53 +142,83 @@ class DropLabel(Label):
 # --------------------------------------------------------------------------------------
 class AgendaItem(BoxLayout):
     def __init__(self, text, index, app, **kwargs):
-        super().__init__(orientation="horizontal", spacing=10, size_hint_y=None, height=50, **kwargs)
+        super().__init__(orientation="horizontal", spacing=10, size_hint_y=None, **kwargs)  # remove fixed height
         
         self.app = app
         self.index = index
         self.selected = True  # start selected by default
         
-        # Create a checkbox to show selection state
+        # create a checkbox to show selection state
         self.checkbox = CheckBox(active=True, size_hint_x=None, width=40)
         self.checkbox.bind(active=self.on_checkbox_toggle)
         self.add_widget(self.checkbox)
         
-        # Create label for the text content
+        # create label for the text content with proper text wrapping
         self.label = Label(
             text=text,
-            markup=True,
-            text_size=(None, None),
+            markup=False,  # disable markup to avoid formatting issues
+            text_size=(None, None),  # will be set in _update_text_size
             halign="left",
-            valign="middle",
+            valign="top",  # align to top for multi-line text
             color=[0, 0, 0, 1],
-            size_hint_x=1
+            size_hint_x=1,
+            size_hint_y=None,  # important: don't let label stretch vertically
+            font_size=24  # smaller font size for better fitting
         )
-        self.label.bind(size=self._update_text_size)
+        self.label.bind(texture_size=self._on_label_texture_size)  # bind to texture_size instead of size
         self.add_widget(self.label)
         
-        # Set initial background after widget is fully constructed
-        # Use Clock.schedule_once to delay this until the next frame
+        # set initial background after widget is fully constructed
         from kivy.clock import Clock
-        Clock.schedule_once(lambda dt: self.update_background(), 0)
+        Clock.schedule_once(lambda dt: self._setup_initial_size(), 0)
+    
+    def _setup_initial_size(self):
+        """setup initial text size and height after widget is constructed"""
+        self._update_text_size()
+        self.update_background()
     
     def _update_text_size(self, *args):
-        # Update text_size when label size changes for proper text wrapping
-        self.label.text_size = (self.label.width, None)
+        """update text_size when label size changes for proper text wrapping"""
+        if self.label.parent:  # make sure label is added to parent
+            # set text width to available space minus checkbox width and spacing
+            available_width = self.width - self.checkbox.width - 20  # 20 for spacing and padding
+            if available_width > 0:
+                self.label.text_size = (available_width, None)
+    
+    def _on_label_texture_size(self, instance, texture_size):
+        """called when label's rendered text size changes"""
+        # update the label height to match the text height
+        self.label.height = texture_size[1]
+        # update the container height to fit the label plus some padding
+        self.height = max(50, texture_size[1] + 20)  # minimum 50px height, 20px padding
+    
+    def on_size(self, *args):
+        """update background and text size when widget size changes"""
+        self._update_text_size()
+        self.update_background()
     
     def on_checkbox_toggle(self, checkbox, value):
-        """Handle checkbox toggle"""
+        """handle checkbox toggle"""
         self.selected = value
         self.update_background()
         
-        # Notify the app
+        # notify the app
         if value:
             self.app.mark_selected(self.index)
         else:
             self.app.mark_deselected(self.index)
     
+    def on_touch_down(self, touch):
+        """make the entire row clickable"""
+        if self.collide_point(*touch.pos):
+            # toggle selection when clicked anywhere on the row
+            self.checkbox.active = not self.checkbox.active
+            return True
+        return super().on_touch_down(touch)
+    
     def update_background(self):
-        """Update background color based on selection"""
-        if not self.canvas:  # Check if canvas exists
+        """update background color based on selection"""
+        if not self.canvas:  # check if canvas exists
             return
             
         self.canvas.before.clear()
@@ -199,12 +229,8 @@ class AgendaItem(BoxLayout):
                 Color(*StyledButton.hex2rgba("#FFFFFF", 1.0))  # white background
             Rectangle(pos=self.pos, size=self.size)
     
-    def on_size(self, *args):
-        """Update background rectangle when size changes"""
-        self.update_background()
-    
     def on_pos(self, *args):
-        """Update background rectangle when position changes"""
+        """update background rectangle when position changes"""
         self.update_background()
 
 
