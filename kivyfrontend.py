@@ -49,7 +49,7 @@ from kivy.uix.widget import Widget
 from kivy.config import Config
 Config.set('input', 'mouse', 'mouse,multitouch_on_demand')
 
-from kivybackend import AgendaBackend, PROMPT_TEMPLATE
+from kivybackend import AgendaBackend, PROMPT_TEMPLATE_PASS1, PROMPT_TEMPLATE_PASS2
 
 # --------------------------------------------------------------------------------------
 # Constants
@@ -617,7 +617,8 @@ class PacificaAgendaApp(App):
 
     generated_report_text = ""
     meeting_dates_for_report: List[str] = []
-    current_prompt_template: str = ""
+    prompt_pass1: str = ""
+    prompt_pass2: str = ""
 
     debug_console: TextInput | None = None
 
@@ -627,10 +628,15 @@ class PacificaAgendaApp(App):
         self.config_file = os.path.join(self.user_data_dir, "pacifica_agenda_gui.json")
         self.CONF = self._load_conf()
 
+        # Load prompts from config, with fallback to defaults
+        self.prompt_pass1 = self.CONF.get("prompt_pass1") or PROMPT_TEMPLATE_PASS1
+        self.prompt_pass2 = self.CONF.get("prompt_pass2") or PROMPT_TEMPLATE_PASS2
+
     def _load_conf(self) -> dict:
         default_conf = {
-            "model_path": "",  # Default is empty, will be set on install
-            "prompt_path": "",
+            "model_path": "",
+            "prompt_pass1": None,
+            "prompt_pass2": None,
             "debug": False,
         }
         try:
@@ -658,10 +664,6 @@ class PacificaAgendaApp(App):
             model_path=self.CONF["model_path"],
             user_data_dir=self.user_data_dir,
         )
-
-        self.current_prompt_template = PROMPT_TEMPLATE  # default
-        if self.CONF.get("prompt_path") and os.path.exists(self.CONF["prompt_path"]):
-            self._load_prompt_from_file(self.CONF["prompt_path"])
 
         self.screen_manager = ScreenManager(transition=SlideTransition(duration=0.25))
         self._build_home()
@@ -1010,17 +1012,30 @@ class PacificaAgendaApp(App):
         model_box.add_widget(self.install_model_btn)
         root.add_widget(model_box)
 
-        # Prompt picker
-        prompt_box = BoxLayout(orientation="horizontal", size_hint_y=None, height=75, spacing=10)
-        prompt_lbl = Label(text="Prompt File:", color=[0, 0, 0, 1], size_hint_x=0.2, font_size=20)
-        self.prompt_path_lbl = Label(text=self.CONF.get("prompt_path", ""), color=[0, 0, 0, 1], halign="left", font_size=16)
-        self.prompt_path_lbl.bind(size=lambda inst, *_: inst.setter("text_size")(inst, (inst.width, None)))
-        choose_prompt = StyledButton(text="Choose", size_hint=(None, None), width=180, height=75)
-        choose_prompt.bind(on_release=lambda *_: self._choose_prompt())
-        prompt_box.add_widget(prompt_lbl)
-        prompt_box.add_widget(self.prompt_path_lbl)
-        prompt_box.add_widget(choose_prompt)
-        root.add_widget(prompt_box)
+        # Prompt Editor Section
+        prompt_edit_title = Label(
+            text="Prompt Templates",
+            color=[0, 0, 0, 1],
+            font_size=24, # A bit larger for a section title
+            bold=True,
+            size_hint_y=None,
+            height=40,
+            halign='left'
+        )
+        prompt_edit_title.bind(size=lambda inst, *_: inst.setter("text_size")(inst, (inst.width, None)))
+        root.add_widget(prompt_edit_title)
+
+        prompt_btn_box = BoxLayout(orientation="horizontal", size_hint_y=None, height=75, spacing=15)
+
+        edit_p1_btn = StyledButton(text="Edit Pass 1 Prompt")
+        edit_p1_btn.bind(on_release=lambda *_: self._open_prompt_editor("pass1"))
+        prompt_btn_box.add_widget(edit_p1_btn)
+
+        edit_p2_btn = StyledButton(text="Edit Pass 2 Prompt")
+        edit_p2_btn.bind(on_release=lambda *_: self._open_prompt_editor("pass2"))
+        prompt_btn_box.add_widget(edit_p2_btn)
+
+        root.add_widget(prompt_btn_box)
 
         # Debug switch
         dbg_switch = ToggleSwitch("Debug Mode", self.CONF["debug"], self._toggle_debug)
@@ -1076,53 +1091,64 @@ class PacificaAgendaApp(App):
         self._show_error("Model Download Failed", traceback.format_exc())
         self._update_model_status()
 
-    def _choose_prompt(self):
-        # try native dialog first
-        filters = [
-            ("Text files", "*.txt"),
-            ("Prompt files", "*.prompt"),
-            ("Markdown files", "*.md"),
-            ("JSON files", "*.json"),
-            ("Python files", "*.py"),
-            ("All files", "*.*")
-        ]
-        selection = native_open_file_dialog(title="Select Prompt File", file_types=filters)
-        
-        if selection:
-            self.CONF["prompt_path"] = selection[0]
-            self.prompt_path_lbl.text = selection[0]
-            self._save_conf()
-            self._load_prompt_from_file(selection[0])
-            return
-        
-        # fallback to kivy file chooser
-        chooser = FileChooserListView(path=os.getcwd(), filters=["*.txt", "*.prompt", "*.md", "*.json", "*.py", "*"])
-        popup = Popup(title="Select Prompt File", content=chooser, size_hint=(0.9, 0.9))
-
-        def _sel(_, selection):
-            if selection:
-                self.CONF["prompt_path"] = selection[0]
-                self.prompt_path_lbl.text = selection[0]
-                self._save_conf()
-                popup.dismiss()
-                self._load_prompt_from_file(selection[0])
-
-        chooser.bind(on_submit=_sel)
-        popup.open()
-
-    def _load_prompt_from_file(self, path: str):
-        try:
-            with open(path, "r", encoding="utf-8") as fp:
-                self.current_prompt_template = fp.read()
-            self._show_info("Custom prompt loaded successfully.")
-        except Exception as exc:
-            self.current_prompt_template = PROMPT_TEMPLATE  # fallback to default
-            self._show_error("Prompt Load Error", str(exc))
-
     def _toggle_debug(self, value: bool):
         self.CONF["debug"] = value
         self._save_conf()
         self._show_info("Debug mode will apply on next app restart.")
+
+    def _open_prompt_editor(self, prompt_type: str):
+        if prompt_type == "pass1":
+            title = "Edit Pass 1 (Summarization) Prompt"
+            initial_text = self.prompt_pass1
+            default_text = PROMPT_TEMPLATE_PASS1
+        elif prompt_type == "pass2":
+            title = "Edit Pass 2 (Formatting) Prompt"
+            initial_text = self.prompt_pass2
+            default_text = PROMPT_TEMPLATE_PASS2
+        else:
+            return
+
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        
+        text_input = TextInput(text=initial_text, font_size=14)
+        scroll_view = ScrollView()
+        scroll_view.add_widget(text_input)
+        content.add_widget(scroll_view)
+
+        btn_layout = BoxLayout(size_hint_y=None, height=75, spacing=10)
+        reset_btn = StyledButton(text="Reset to Default")
+        cancel_btn = StyledButton(text="Cancel")
+        save_btn = StyledButton(text="Save & Close")
+        btn_layout.add_widget(reset_btn)
+        btn_layout.add_widget(cancel_btn)
+        btn_layout.add_widget(save_btn)
+        content.add_widget(btn_layout)
+
+        popup = Popup(title=title, content=content, size_hint=(0.9, 0.9), auto_dismiss=False)
+
+        def on_save(*_):
+            new_text = text_input.text
+            if prompt_type == "pass1":
+                self.prompt_pass1 = new_text
+                self.CONF["prompt_pass1"] = new_text
+            else: # pass2
+                self.prompt_pass2 = new_text
+                self.CONF["prompt_pass2"] = new_text
+            self._save_conf()
+            self._show_info("Prompt saved successfully.")
+            popup.dismiss()
+
+        def on_reset(*_):
+            text_input.text = default_text
+
+        def on_cancel(*_):
+            popup.dismiss()
+
+        save_btn.bind(on_release=on_save)
+        reset_btn.bind(on_release=on_reset)
+        cancel_btn.bind(on_release=on_cancel)
+
+        popup.open()
 
     # ---------------------------------------------------------------- Help & Credits
     def _build_help(self):
@@ -1329,9 +1355,10 @@ class PacificaAgendaApp(App):
                 rows,
                 token_callback=self._token_cb,
                 done_callback=self._done_cb,
-                error_callback=self._err_cb, # Ensure error_callback is passed
+                error_callback=self._err_cb,
                 cancel_event=self.generation_cancel_event,
-                prompt_template=self.current_prompt_template,
+                prompt_template_pass1=self.prompt_pass1,
+                prompt_template_pass2=self.prompt_pass2,
             )
         except RuntimeError as exc:
             self._show_error("Model Error", str(exc))

@@ -132,7 +132,42 @@ REQUIRED_HEADERS: List[str] = [
     "Include in Summary for Mayor",
 ]
 
-PROMPT_TEMPLATE = """You are an expert city clerk responsible for creating agenda summaries for the City Council. Your task is to take a list of agenda items for a specific meeting date and format them into a clear, concise report.
+PROMPT_TEMPLATE_PASS1 = """You are an expert city clerk. Your task is to summarize each agenda item into ONE short clause.
+
+THINK STEP BY STEP, ONCE PER ITEM AND NO MORE. ONCE YOU ARE DONE WITH EVERY ITEM IMMEDIATELY EXIT YOUR THINKING BLOCK AND OUTPUT THE SUMMARIZED LINES.
+Rules for summarization:
+- Summarize each agenda item in ONE concise single clause as short and clean as possible that clearly signals what the item is. You can omit most parenthesized text from original inputs. Attempt to split or summarize further if it reads like a run-on sentence.
+- You should first figure out which category each item belongs in and prepend it to the item: "Study Session:" or "Closed Session:" or "Special Presentations:" or "Consent:" or "Consideration or Public Hearing:". IMPORTANT: ALL considerations OR public hearings go under "Consideration or Public Hearing:".
+- You MUST omit unnecessary internal workflow words such as "moved from [dates]", and "per [person]". DO NOT say "moved from 1/1 to 12/31 per Y.Carter" or "per K.Woodhouse" or such.
+- If an item INCLUDES the TEXT "placeholder" SPECIFICALLY (NOT the text "TBD", etc), DELETE the entire placeholder and append "(placeholder)" to the end with no other unnecessary placeholder details.
+- If an item INCLUDES " ADD DESCRIPTION", DELETE it and append " - ADD DESCRIPTION" to the end, after any potential "(placeholder)".
+- Each summary title MUST use Title Case (capitalize all principal words), for example: "Approval of Minutes for 1/1/2025 Meeting".
+- If an agenda item includes a workflow date, DELETE it. For logistic dates that belong in the item, keep the date exactly as it appears; do not convert month names or add/remove leading zeros.
+- You are also allowed to split long items into seperate items if they would do well as concise seperate items.
+
+Some good examples:
+<examples>
+Study Session: Study Session on Revenue Generation - ADD DESCRIPTION
+Closed Session: TBD - ADD DESCRIPTION
+Special Presentations: City Staff New Hires (Semi-Annual Update)
+Consent: Annual POs/Agreements over $75K PWD-Wastewater
+Consent: Police Militarized Equipment Annual Update - ADD DESCRIPTION (placeholder)
+Consent: Sewer service charges for FY2025-26 (last year of approved 5-year schedule)
+Consent: Approval of Minutes for 1/1/2024 City Council Meeting
+Consideration or Public Hearing: Resolution to Establish Climate Action & Resilience Plan Implementation Committee per CAAP Task Force Charter
+Consideration or Public Hearing: Continued Consideration of Climate Action and Resilience Plan Adoption
+</examples>
+
+Meeting Date: {md} - IMPORTANT! THIS IS THE ACTUAL MEETING DATE, KEEP TRACK OF IT CAREFULLY! Start off your summarization lines with this meeting date, parsed neatly as <Month Day> like "Meeting Date: January 1" or "Meeting Date: December 31". Parse carefully, i.e. "8-Sep" = "Meeting Date: September 8"!
+
+Agenda Items to Summarize - ONLY SUMMARIZE THESE, DO NOT ADD IN FROM EXAMPLES ACCIDENTALLY:
+<summarize_these>
+{items_text}
+</summarize_these>
+
+Provide ONLY the proper meeting date format and then the summarized lines, each CAREFULLY capitalized and prepended properly, one per line: /think"""
+
+PROMPT_TEMPLATE_PASS2 = """You are an expert city clerk responsible for creating agenda summaries for the City Council. Your task is to take a list of agenda items for a specific meeting date and format them into a clear, concise report.
 
 You have recieved a set of summarized items. You are to categorize them and properly edit them in small ways if necessary (capitalization, merging, etc) and put them together into a resport.
 Follow these rules strictly:
@@ -325,7 +360,8 @@ class AgendaBackend:
         done_callback: Callable[[str, List[str]], None] | None = None,
         error_callback: Callable[[Exception], None] | None = None,
         cancel_event: threading.Event | None = None,
-        prompt_template: str | None = None,
+        prompt_template_pass1: str | None = None,
+        prompt_template_pass2: str | None = None,
     ):
         """
         Two-pass streaming generation.
@@ -348,7 +384,8 @@ class AgendaBackend:
                 done_callback,
                 error_callback,
                 cancel_event,
-                prompt_template,
+                prompt_template_pass1,
+                prompt_template_pass2,
             ),
             daemon=True,
         )
@@ -362,7 +399,8 @@ class AgendaBackend:
         done_cb: Callable[[str, List[str]], None] | None,
         err_cb: Callable[[Exception], None] | None,
         cancel_event: threading.Event | None = None,
-        prompt_template: str | None = None,
+        prompt_template_pass1: str | None = None,
+        prompt_template_pass2: str | None = None,
     ):
         gui_filter = GUITokenFilter()
 
@@ -404,40 +442,10 @@ class AgendaBackend:
                     items_text += entry + "\n"
 
                 # ------------ PASS 1 – single-line summaries
-                summarization_prompt = f"""You are an expert city clerk. Your task is to summarize each agenda item into ONE short clause.
-
-THINK STEP BY STEP, ONCE PER ITEM AND NO MORE. ONCE YOU ARE DONE WITH EVERY ITEM IMMEDIATELY EXIT YOUR THINKING BLOCK AND OUTPUT THE SUMMARIZED LINES.
-Rules for summarization:
-- Summarize each agenda item in ONE concise single clause as short and clean as possible that clearly signals what the item is. You can omit most parenthesized text from original inputs. Attempt to split or summarize further if it reads like a run-on sentence.
-- You should first figure out which category each item belongs in and prepend it to the item: "Study Session:" or "Closed Session:" or "Special Presentations:" or "Consent:" or "Consideration or Public Hearing:". IMPORTANT: ALL considerations OR public hearings go under "Consideration or Public Hearing:".
-- You MUST omit unnecessary internal workflow words such as "moved from [dates]", and "per [person]". DO NOT say "moved from 1/1 to 12/31 per Y.Carter" or "per K.Woodhouse" or such.
-- If an item INCLUDES the TEXT "placeholder" SPECIFICALLY (NOT the text "TBD", etc), DELETE the entire placeholder and append "(placeholder)" to the end with no other unnecessary placeholder details.
-- If an item INCLUDES " ADD DESCRIPTION", DELETE it and append " - ADD DESCRIPTION" to the end, after any potential "(placeholder)".
-- Each summary title MUST use Title Case (capitalize all principal words), for example: "Approval of Minutes for 1/1/2025 Meeting".
-- If an agenda item includes a workflow date, DELETE it. For logistic dates that belong in the item, keep the date exactly as it appears; do not convert month names or add/remove leading zeros.
-- You are also allowed to split long items into seperate items if they would do well as concise seperate items.
-
-Some good examples:
-<examples>
-Study Session: Study Session on Revenue Generation - ADD DESCRIPTION
-Closed Session: TBD - ADD DESCRIPTION
-Special Presentations: City Staff New Hires (Semi-Annual Update)
-Consent: Annual POs/Agreements over $75K PWD-Wastewater
-Consent: Police Militarized Equipment Annual Update - ADD DESCRIPTION (placeholder)
-Consent: Sewer service charges for FY2025-26 (last year of approved 5-year schedule)
-Consent: Approval of Minutes for 1/1/2024 City Council Meeting
-Consideration or Public Hearing: Resolution to Establish Climate Action & Resilience Plan Implementation Committee per CAAP Task Force Charter
-Consideration or Public Hearing: Continued Consideration of Climate Action and Resilience Plan Adoption
-</examples>
-
-Meeting Date: {md} - IMPORTANT! THIS IS THE ACTUAL MEETING DATE, KEEP TRACK OF IT CAREFULLY! Start off your summarization lines with this meeting date, parsed neatly as <Month Day> like "Meeting Date: January 1" or "Meeting Date: December 31". Parse carefully, i.e. "8-Sep" = "Meeting Date: September 8"!
-
-Agenda Items to Summarize - ONLY SUMMARIZE THESE, DO NOT ADD IN FROM EXAMPLES ACCIDENTALLY:
-<summarize_these>
-{items_text.strip()}
-</summarize_these>
-
-Provide ONLY the proper meeting date format and then the summarized lines, each CAREFULLY capitalized and prepended properly, one per line: /think"""
+                template_pass1 = prompt_template_pass1 or PROMPT_TEMPLATE_PASS1
+                summarization_prompt = template_pass1.format(
+                    md=md, items_text=items_text.strip()
+                )
                 
                 print("\n--- PASS 1: SUMMARIZATION ---")
                 pass1_stream = self.llm_model.create_chat_completion(
@@ -469,8 +477,8 @@ Provide ONLY the proper meeting date format and then the summarized lines, each 
                 # use the main prompt template for the final formatting pass
                 # we replace the original items_text with the summarized ones from pass 1
                 # and add a /no_think instruction to prevent the model from re-summarizing
-                final_prompt_template = prompt_template or PROMPT_TEMPLATE
-                format_prompt = final_prompt_template.format(
+                template_pass2 = prompt_template_pass2 or PROMPT_TEMPLATE_PASS2
+                format_prompt = template_pass2.format(
                     meeting_date=md, items_text=clean_summary.strip()
                 ) + " /no_think"
 
