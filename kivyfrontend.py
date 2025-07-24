@@ -1036,73 +1036,92 @@ class PacificaAgendaApp(App):
 
     def _build_credits(self):
         scr = CreditsScreen(name="credits")
-        root = BoxLayout(orientation="vertical", padding=20, spacing=20)
+        root = BoxLayout(orientation="vertical", padding=20, spacing=10)
         scr.add_widget(root)
-        
-        # title with back button
-        header = BoxLayout(orientation="horizontal", size_hint_y=None, height=60, spacing=10)
+
+        # build header with back button and centered title
+        header = BoxLayout(orientation="horizontal", size_hint_y=None, height=60, spacing=20)
         back_btn = StyledButton(text="Back", size_hint=(None, None), width=120, height=50, font_size=18)
         back_btn.bind(on_release=lambda *_: self._navigate_to("home"))
         header.add_widget(back_btn)
-        
-        title = Label(text="[b]About & Credits[/b]", markup=True, font_size=32, color=[0, 0, 0, 1])
+
+        title = Label(
+            text="[b]About & Credits[/b]",
+            markup=True,
+            font_size=34,
+            color=[0, 0, 0, 1],
+            halign="center",
+            valign="middle"
+        )
+        title.bind(size=title.setter('text_size'))
         header.add_widget(title)
-        header.add_widget(Widget())  # spacer
+        
+        # add a spacer to balance the back button, keeping title centered
+        header.add_widget(Widget(size_hint=(None, None), width=120))
         root.add_widget(header)
-        
-        # main content in center
-        content_frame = BoxLayout(orientation="vertical", spacing=25, size_hint=(0.8, None), height=400)
-        content_frame.pos_hint = {'center_x': 0.5}
-        
+
+        # scrollable area for the main content
+        scroll = ScrollView(size_hint=(1, 1))
+        content = BoxLayout(orientation="vertical", spacing=15, size_hint_y=None, padding=(20, 20))
+        content.bind(minimum_height=content.setter('height'))
+        scroll.add_widget(content)
+        root.add_widget(scroll)
+
+        # helper to add a centered label with wrapping
+        def add_centered(text, fs, bold=False):
+            formatted_text = f"[b]{text}[/b]" if bold else text
+            lbl = Label(
+                text=f"[size={fs}]{formatted_text}[/size]",
+                markup=True,
+                font_size=fs,
+                color=[0, 0, 0, 1],
+                size_hint_y=None,
+                halign="center",
+                valign="middle",
+            )
+            lbl.bind(
+                width=lambda inst, w: inst.setter("text_size")(inst, (w, None)),
+                texture_size=lambda inst, size: setattr(inst, "height", size[1]),
+            )
+            content.add_widget(lbl)
+            content.add_widget(Widget(size_hint_y=None, height=5)) # reduced spacing
+
         # app title
-        app_title = Label(
-            text="[size=36][b]City of Pacifica[/b]\nAgenda Summary Generator[/size]",
-            markup=True,
-            halign="center",
-            color=[0, 0, 0, 1],
-            size_hint_y=None,
-            height=100
+        add_centered("City of Pacifica\nAgenda Summary Generator", 32, bold=True)
+        content.add_widget(Widget(size_hint_y=None, height=15))
+        
+        # version
+        add_centered("Version 2.0 - Kivy Edition", 26, bold=True)
+        content.add_widget(Widget(size_hint_y=None, height=15))
+
+        # description
+        add_centered(
+            "A modern, cross-platform app for generating "
+            "AI-powered summaries of city council agenda items "
+            "for executive review and public transparency.",
+            18,
         )
-        content_frame.add_widget(app_title)
-        
-        # version and description
-        version_info = Label(
-            text="[size=24][b]Version 2.0 - Kivy Edition[/b][/size]\n\n"
-                 "[size=18]A modern, cross-platform application for generating\n"
-                 "AI-powered summaries of city council agenda items\n"
-                 "for executive review and public transparency.[/size]",
-            markup=True,
-            halign="center",
-            color=[0, 0, 0, 1],
-            size_hint_y=None,
-            height=120
+        content.add_widget(Widget(size_hint_y=None, height=20))
+
+        # development team header
+        add_centered("Development Team", 24, bold=True)
+        content.add_widget(Widget(size_hint_y=None, height=15))
+
+        # team details
+        add_centered(
+            "Project Lead & Developer: [b]Nickolas Yang[/b]\n"
+            "Project Coordination: [b]Madeleine Hur[/b]",
+            20,
         )
-        content_frame.add_widget(version_info)
+        content.add_widget(Widget(size_hint_y=None, height=20))
         
-        # credits
-        credits_info = Label(
-            text="[size=20][b]Development Team[/b][/size]\n\n"
-                 "[size=18]Project Lead & Developer: [b]Nickolas Yang[/b]\n"
-                 "Project Coordination: [b]Madeleine Hur[/b]\n\n"
-                 "Built with Python, Kivy, and local LLMs\n"
-                 "Powered by llama-cpp-python for privacy-focused AI processing[/size]",
-            markup=True,
-            halign="center",
-            color=[0, 0, 0, 1],
-            size_hint_y=None,
-            height=140
+        add_centered(
+            "Built with Python, Kivy, and local LLMs.\n"
+            "Powered by llama-cpp-python for privacy-focused AI processing.",
+            16,
         )
-        content_frame.add_widget(credits_info)
-        
-        # add to centered container
-        center_container = BoxLayout()
-        center_container.add_widget(Widget())  # left spacer
-        center_container.add_widget(content_frame)
-        center_container.add_widget(Widget())  # right spacer
-        
-        root.add_widget(center_container)
-        root.add_widget(Widget())  # bottom spacer
-        
+
+        # let things settle then add to screen
         self.screen_manager.add_widget(scr)
 
     # ---------------------------------------------------------------- Generation logic
