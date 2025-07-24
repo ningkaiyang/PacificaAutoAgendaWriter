@@ -29,10 +29,8 @@ This application is at **Version 2.0 (Kivy Edition)**. It has been rebuilt from 
 ## TBD
 *   **Video Demonstration:** A link for a video demonstration in the help tab is yet to be added.
 *   **Help Tab Improvements:** Planning to enhance the help tab with more detailed instructions and troubleshooting tips
-*   **GUI Experience:** Working on improving the overall user interface for smoother navigation and better usability - add Pacifica branding and make neater fun stuff.
-*   **Improved Error Messages:** Add more details to why a .csv import fails, potentially scanning across set of expected column headers in the .csv until a mismatch to what is expected occurs, and then saying that it expects column 'A' to be 'MEETING DATE', etc.
 *   **Ignoring Certain Statements:** Parse out and ignore everything denoted by brackets [] in what is sent to the LLM.
-*   **Settings Menu: Prompt Selection:** Create a settings menu and appdata folder and allow for flexible prompt modification in the back-end. It should have button to edit the PASS 1 or PASS 2 prompt then it opens a text box for what the prompt is and you can modify it there. (And can still use {}) to use fstrings replacements.
+*   **Settings Menu: Prompt Selection:** Create a settings menu and appdata folder and allow for flexible prompt modification in the back-end. It should have button to edit the PASS 1 or PASS 2 prompt then it opens a text box for what the prompt is and you can modify it there. (And can still use {}) to use fstrings replacements. The boxes should start populated with the default prompts, with a "reset to default" button available too.
 *   **Settings Menu: Debug Mode:** Create a settings menu and appdata folder and allow for toggling a Debug Mode, where when enabled a terminal appears where the PASS 1 and PASS 2 thoughts are outputted, alongside input values and token speeds and memory, to see and help debug on any OS.
 *   **Settings Menu: Uninstall App:** Clean up the app files including where model got downloaded and json settings.
 

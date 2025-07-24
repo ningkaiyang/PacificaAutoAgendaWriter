@@ -157,12 +157,13 @@ def native_save_file_dialog(title="Save File", filename="", file_types=None):
 # Helper widgets
 # --------------------------------------------------------------------------------------
 class StyledButton(Button):
-    """Flat button with Pacifica colours and rounded corners."""
+    """Flat button with Pacifica colours, rounded corners, shadow, and hover effect."""
+    is_hovered = BooleanProperty(False)
 
     def __init__(self, **kw):
         # set a default font_size if not provided by the caller
         if "font_size" not in kw:
-            kw["font_size"] = 22  # larger default font size
+            kw["font_size"] = 26  # even larger default font size
 
         super().__init__(
             background_normal="",
@@ -170,22 +171,52 @@ class StyledButton(Button):
             color=[1, 1, 1, 1],
             **kw,
         )
+        
+        # bind to mouse position to check for hover
+        Window.bind(mouse_pos=self.on_mouse_pos)
+        self.bind(pos=self._update_rect, size=self._update_rect, state=self._update_color, is_hovered=self._update_color)
 
         with self.canvas.before:
+            # Drop shadow
+            self.shadow_color = Color(0, 0, 0, 0.2)
+            self.shadow = RoundedRectangle(pos=self.pos, size=self.size, radius=[15])
+            
+            # Main background
             self.bg_color = Color(*self.hex2rgba(PACIFICA_BLUE, 1.0))
             self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15])
 
-        self.bind(pos=self._update_rect, size=self._update_rect, state=self._update_color)
+    def on_mouse_pos(self, *args):
+        """check if mouse is over the button"""
+        if not self.get_root_window():
+            return  # do nothing if button is not displayed
+        
+        pos = args[1]
+        # check if cursor is within button bounds
+        inside = self.collide_point(*self.to_widget(*pos))
+        if self.is_hovered != inside:
+            self.is_hovered = inside
 
     def _update_rect(self, *_):
+        """update both shadow and main rectangle"""
+        # shadow is slightly offset
+        shadow_offset = 3
+        self.shadow.pos = (self.pos[0] + shadow_offset, self.pos[1] - shadow_offset)
+        self.shadow.size = self.size
+        
         self.rect.pos = self.pos
         self.rect.size = self.size
 
     def _update_color(self, *_):
+        """update color based on state (normal, hover, down)"""
         if self.state == 'down':
             self.bg_color.rgba = self.hex2rgba(PACIFICA_BLUE, 0.7)  # darker when pressed
+            self.shadow_color.a = 0.1 # less shadow when pressed
+        elif self.is_hovered:
+            self.bg_color.rgba = self.hex2rgba("#5A94C8", 1.0)  # lighter blue on hover
+            self.shadow_color.a = 0.4 # more prominent shadow on hover
         else:
             self.bg_color.rgba = self.hex2rgba(PACIFICA_BLUE, 1.0)
+            self.shadow_color.a = 0.2 # normal shadow
 
     @staticmethod
     def hex2rgba(hx: str, alpha=1.0):
@@ -708,18 +739,18 @@ class PacificaAgendaApp(App):
         upload_zone = UploadZone(self)
         root.add_widget(upload_zone)
 
-        nav_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=60, spacing=15)
+        nav_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=75, spacing=15)
         nav_bar.add_widget(Widget())
 
-        settings_btn = StyledButton(text="Settings", size_hint=(None, None), width=180, height=60)
+        settings_btn = StyledButton(text="Settings", size_hint=(None, None), width=220, height=75)
         settings_btn.bind(on_release=lambda *_: self._navigate_to("settings"))
         nav_bar.add_widget(settings_btn)
 
-        help_btn = StyledButton(text="Help", size_hint=(None, None), width=180, height=60)
+        help_btn = StyledButton(text="Help", size_hint=(None, None), width=220, height=75)
         help_btn.bind(on_release=lambda *_: self._navigate_to("help"))
         nav_bar.add_widget(help_btn)
 
-        credits_btn = StyledButton(text="Credits", size_hint=(None, None), width=180, height=60)
+        credits_btn = StyledButton(text="Credits", size_hint=(None, None), width=220, height=75)
         credits_btn.bind(on_release=lambda *_: self._navigate_to("credits"))
         nav_bar.add_widget(credits_btn)
 
@@ -777,15 +808,15 @@ class PacificaAgendaApp(App):
         layout = BoxLayout(orientation="vertical", padding=20, spacing=15)
         scr.add_widget(layout)
 
-        topbar = BoxLayout(orientation="horizontal", size_hint_y=None, height=60, spacing=10)
-        back_btn = StyledButton(text="Back", size_hint=(None, None), width=150, height=60)
+        topbar = BoxLayout(orientation="horizontal", size_hint_y=None, height=75, spacing=10)
+        back_btn = StyledButton(text="Back", size_hint=(None, None), width=180, height=75)
         back_btn.bind(on_release=lambda *_: self._navigate_to("home"))  # use navigation method
         topbar.add_widget(back_btn)
 
         self.review_label = Label(text="Items Selected: 0", color=[0, 0, 0, 1], font_size=50)
         topbar.add_widget(self.review_label)
 
-        gen_btn = StyledButton(text="Generate", size_hint=(None, None), width=200, height=60)
+        gen_btn = StyledButton(text="Generate", size_hint=(None, None), width=240, height=75)
         gen_btn.bind(on_release=lambda *_: self._start_generation())
         topbar.add_widget(gen_btn)
 
@@ -830,11 +861,11 @@ class PacificaAgendaApp(App):
         scroll.add_widget(self.items_container)
         layout.add_widget(scroll)
 
-        sel_bar = BoxLayout(size_hint_y=None, height=60, spacing=10)
-        sel_all = StyledButton(text="Select All", size_hint=(None, None), width=180, height=60)
+        sel_bar = BoxLayout(size_hint_y=None, height=75, spacing=10)
+        sel_all = StyledButton(text="Select All", size_hint=(None, None), width=220, height=75)
         sel_all.bind(on_release=lambda *_: self._select_all_items(True))
         sel_bar.add_widget(sel_all)
-        desel_all = StyledButton(text="Deselect All", size_hint=(None, None), width=180, height=60)
+        desel_all = StyledButton(text="Deselect All", size_hint=(None, None), width=220, height=75)
         desel_all.bind(on_release=lambda *_: self._select_all_items(False))
         sel_bar.add_widget(desel_all)
         layout.add_widget(sel_bar)
@@ -906,12 +937,12 @@ class PacificaAgendaApp(App):
         layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
         scr.add_widget(layout)
 
-        top = BoxLayout(orientation="horizontal", size_hint_y=None, height=60, spacing=10)
-        self.back_gen_btn = StyledButton(text="Back", size_hint=(None, None), width=150, height=60)
+        top = BoxLayout(orientation="horizontal", size_hint_y=None, height=75, spacing=10)
+        self.back_gen_btn = StyledButton(text="Back", size_hint=(None, None), width=180, height=75)
         self.back_gen_btn.bind(on_release=lambda *_: self._cancel_generation())
         top.add_widget(self.back_gen_btn)
 
-        save_btn = StyledButton(text="Save", size_hint=(None, None), width=180, height=60)
+        save_btn = StyledButton(text="Save", size_hint=(None, None), width=220, height=75)
         save_btn.disabled = True
         self.save_button = save_btn
         save_btn.bind(on_release=lambda *_: self._save_report())
@@ -968,11 +999,11 @@ class PacificaAgendaApp(App):
         root.add_widget(title)
 
         # Model installer
-        model_box = BoxLayout(orientation="horizontal", size_hint_y=None, height=60, spacing=10)
+        model_box = BoxLayout(orientation="horizontal", size_hint_y=None, height=75, spacing=10)
         model_lbl = Label(text="Model:", color=[0, 0, 0, 1], size_hint_x=0.2, font_size=20)
         self.model_status_lbl = Label(text="Checking...", color=[0, 0, 0, 1], halign="left", font_size=16)
         self.model_status_lbl.bind(size=lambda inst, *_: inst.setter("text_size")(inst, (inst.width, None)))
-        self.install_model_btn = StyledButton(text="Install", size_hint=(None, None), width=150, height=60)
+        self.install_model_btn = StyledButton(text="Install", size_hint=(None, None), width=180, height=75)
         self.install_model_btn.bind(on_release=lambda *_: self._install_model())
         model_box.add_widget(model_lbl)
         model_box.add_widget(self.model_status_lbl)
@@ -980,11 +1011,11 @@ class PacificaAgendaApp(App):
         root.add_widget(model_box)
 
         # Prompt picker
-        prompt_box = BoxLayout(orientation="horizontal", size_hint_y=None, height=60, spacing=10)
+        prompt_box = BoxLayout(orientation="horizontal", size_hint_y=None, height=75, spacing=10)
         prompt_lbl = Label(text="Prompt File:", color=[0, 0, 0, 1], size_hint_x=0.2, font_size=20)
         self.prompt_path_lbl = Label(text=self.CONF.get("prompt_path", ""), color=[0, 0, 0, 1], halign="left", font_size=16)
         self.prompt_path_lbl.bind(size=lambda inst, *_: inst.setter("text_size")(inst, (inst.width, None)))
-        choose_prompt = StyledButton(text="Choose", size_hint=(None, None), width=150, height=60)
+        choose_prompt = StyledButton(text="Choose", size_hint=(None, None), width=180, height=75)
         choose_prompt.bind(on_release=lambda *_: self._choose_prompt())
         prompt_box.add_widget(prompt_lbl)
         prompt_box.add_widget(self.prompt_path_lbl)
@@ -995,8 +1026,8 @@ class PacificaAgendaApp(App):
         dbg_switch = ToggleSwitch("Debug Mode", self.CONF["debug"], self._toggle_debug)
         root.add_widget(dbg_switch)
 
-        btn_bar = BoxLayout(size_hint_y=None, height=60, spacing=10)
-        back_btn = StyledButton(text="Back", size_hint=(None, None), width=150, height=60)
+        btn_bar = BoxLayout(size_hint_y=None, height=75, spacing=10)
+        back_btn = StyledButton(text="Back", size_hint=(None, None), width=180, height=75)
         back_btn.bind(on_release=lambda *_: self._navigate_to("home"))  # use navigation method
         btn_bar.add_widget(back_btn)
         root.add_widget(btn_bar)
@@ -1100,8 +1131,8 @@ class PacificaAgendaApp(App):
         scr.add_widget(root)
         
         # title with back button
-        header = BoxLayout(orientation="horizontal", size_hint_y=None, height=70, spacing=10)
-        back_btn = StyledButton(text="Back", size_hint=(None, None), width=150, height=60)
+        header = BoxLayout(orientation="horizontal", size_hint_y=None, height=85, spacing=10)
+        back_btn = StyledButton(text="Back", size_hint=(None, None), width=180, height=75)
         back_btn.bind(on_release=lambda *_: self._navigate_to("home"))
         header.add_widget(back_btn)
         
@@ -1171,8 +1202,8 @@ class PacificaAgendaApp(App):
         scr.add_widget(root)
 
         # build header with back button and centered title
-        header = BoxLayout(orientation="horizontal", size_hint_y=None, height=70, spacing=20)
-        back_btn = StyledButton(text="Back", size_hint=(None, None), width=150, height=60)
+        header = BoxLayout(orientation="horizontal", size_hint_y=None, height=85, spacing=20)
+        back_btn = StyledButton(text="Back", size_hint=(None, None), width=180, height=75)
         back_btn.bind(on_release=lambda *_: self._navigate_to("home"))
         header.add_widget(back_btn)
 
@@ -1381,7 +1412,7 @@ class PacificaAgendaApp(App):
         content.add_widget(filename_input)
         
         # buttons
-        btn_layout = BoxLayout(size_hint_y=None, height=60, spacing=10)
+        btn_layout = BoxLayout(size_hint_y=None, height=75, spacing=10)
         cancel_btn = StyledButton(text="Cancel", size_hint_x=0.5)
         save_btn = StyledButton(text="Save", size_hint_x=0.5)
         btn_layout.add_widget(cancel_btn)
