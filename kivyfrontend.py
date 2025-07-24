@@ -595,24 +595,30 @@ class PacificaAgendaApp(App):
         root = BoxLayout(orientation="vertical", padding=40, spacing=20)
         scr.add_widget(root)
 
-        # add logo above header if available
+        # logo and header container
+        logo_header = BoxLayout(orientation="horizontal", size_hint=(1, None), height=200, spacing=20)
+        logo_header.add_widget(Widget(size_hint_x=1))  # add spacer to center content
         try:
+            from kivy.uix.image import Image as KivyImage
             if os.path.exists("logo.png"):
-                from kivy.uix.image import Image as KivyImage
-                logo = KivyImage(source="logo.png", size_hint=(None, None), size=(120, 120))
-                root.add_widget(logo)
+                logo = KivyImage(source="logo.png", size_hint=(None, None), size=(180, 180))
+                logo_header.add_widget(logo)
         except Exception:
             pass
-
         header = Label(
             text="[b]City of Pacifica[/b]\nAgenda Summary Generator",
             markup=True,
-            font_size=36,  # increased font size
+            font_size=36,
             color=[0, 0, 0, 1],
-            size_hint_y=None,
-            height=120,  # increased height for larger font
+            size_hint=(2, None),
+            height=180,
         )
-        root.add_widget(header)
+        header.halign = "center"
+        header.valign = "middle"
+        header.bind(width=lambda inst, w: inst.setter("text_size")(inst, (w, None)))
+        logo_header.add_widget(header)
+        logo_header.add_widget(Widget(size_hint_x=1))  # add spacer to center content
+        root.add_widget(logo_header)
 
         # unified upload zone (replaces both drop area and browse button)
         upload_zone = UploadZone(self)
