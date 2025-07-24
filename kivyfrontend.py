@@ -66,6 +66,16 @@ PACIFICA_BLUE = "#4682B4"  # headers / accents
 PACIFICA_SAND = "#F5F5DC"  # background
 TEXT_COLOR = "#222222"
 
+# Column sizing for review screen (proportional widths based on Treeview)
+COLUMN_SIZES = {
+    "date": 0.1,    # Corresponds to roughly 100px in customtk
+    "section": 0.17, # Corresponds to roughly 180px in customtk
+    "item": 0.38,   # Corresponds to roughly 400px in customtk
+    "notes": 0.35   # Corresponds to roughly 350px in customtk
+}
+COLUMN_PAD = 10     # Padding inside each column's label
+COLUMN_SPACING = 15  # Spacing between columns within an item row
+
 
 def load_conf() -> dict:
     try:
@@ -317,62 +327,112 @@ class UploadZone(BoxLayout):
 # Simple item widget for the list
 # --------------------------------------------------------------------------------------
 class AgendaItem(BoxLayout):
-    def __init__(self, text, index, app, **kwargs):
-        # Increased padding (horizontal 20px, vertical 15px) and spacing (15px)
+    def __init__(self, date_text, section_text, item_text, notes_text, index, app, **kwargs):
+        # Overall padding for the entire row (checkbox + columns)
         super().__init__(orientation="horizontal", padding=(20, 15), spacing=15, size_hint_y=None, **kwargs)
         
         self.app = app
         self.index = index
         self.selected = True  # start selected by default
         
-        # create a checkbox to show selection state
+        # Checkbox for selection
         self.checkbox = CheckBox(active=True, size_hint_x=None, width=40)
         self.checkbox.bind(active=self.on_checkbox_toggle)
         self.add_widget(self.checkbox)
         
-        # Create label for the text content with proper text wrapping
-        self.label = Label(
-            text=text,
-            markup=False,  # disable markup to avoid formatting issues
-            text_size=(None, None),  # will be set in _update_text_size
-            halign="left",
-            valign="top",  # align to top for multi-line text
-            color=[0, 0, 0, 1],
-            size_hint_x=1,
-            size_hint_y=None,  # important: don't let label stretch vertically
-            font_size=30  # smaller font size for better fitting
+        # Container for all columnar labels
+        self.columns_container = BoxLayout(
+            orientation="horizontal",
+            size_hint_x=1, # Takes remaining horizontal space
+            spacing=COLUMN_SPACING,
+            padding=COLUMN_PAD # Padding inside the column container itself
         )
-        self.label.bind(texture_size=self._on_label_texture_size)  # bind to texture_size instead of size
-        self.add_widget(self.label)
+        self.add_widget(self.columns_container)
+
+        # Individual labels for each column
+        self.date_label = self._create_label(date_text, COLUMN_SIZES["date"])
+        self.section_label = self._create_label(section_text, COLUMN_SIZES["section"])
+        self.item_label = self._create_label(item_text, COLUMN_SIZES["item"])
+        self.notes_label = self._create_label(notes_text, COLUMN_SIZES["notes"])
         
-        # set initial background after widget is fully constructed
+        self.columns_container.add_widget(self.date_label)
+        self.columns_container.add_widget(self.section_label)
+        self.columns_container.add_widget(self.item_label)
+        self.columns_container.add_widget(self.notes_label)
+        
+        self.column_labels = [self.date_label, self.section_label, self.item_label, self.notes_label]
+
+        # Bind to columns_container's width to recalculate text_size for its children
+        self.columns_container.bind(width=self._update_column_layout)
+        # Bind each label's texture_size to re-evaluate the overall row height
+        for label in self.column_labels:
+            label.bind(texture_size=self._on_label_texture_size)
+        
+        # Set initial background after widget is fully constructed
         from kivy.clock import Clock
         Clock.schedule_once(lambda dt: self._setup_initial_size(), 0)
     
+    def _create_label(self, text, size_hint_x_val):
+        """Helper to create consistently styled column labels."""
+        return Label(
+            text=text,
+            markup=False,
+            text_size=(None, None),  # Will be set dynamically
+            halign="left",
+            valign="top",  # Align to top for multi-line text
+            color=[0, 0, 0, 1],
+            size_hint_x=size_hint_x_val,
+            size_hint_y=None,  # Important: don't let label stretch vertically by default
+            font_size=26 # Increased font size
+        )
+    
     def _setup_initial_size(self):
-        """setup initial text size and height after widget is constructed"""
-        self._update_text_size()
+        """Setup initial text size and height after widget is constructed."""
+        # Trigger layout update, which will in turn calculate label text_size and item height.
+        self._update_column_layout()
         self.update_background()
     
-    def _update_text_size(self, *args):
-        """update text_size when label size changes for proper text wrapping"""
-        if self.label.parent:  # make sure label is added to parent
-            # calculate available width considering explicit padding and spacing
-            available_width = self.width - (self.padding[0] + self.padding[2]) - self.checkbox.width - self.spacing
-            if available_width > 0:
-                self.label.text_size = (available_width, None)
+    def _update_column_layout(self, *args):
+        """Dynamically update text_size for all column labels based on container width."""
+        # Calculate available width for the labels within columns_container
+        # This accounts for columns_container's own internal padding and spacing
+        available_width_for_labels = (
+            self.columns_container.width
+            - (self.columns_container.padding[0] + self.columns_container.padding[2])
+            - (self.columns_container.spacing * (len(self.column_labels) - 1))
+        )
+        
+        if available_width_for_labels <= 0:
+            return
+
+        for label in self.column_labels:
+            # Calculate actual width for each label based on its size_hint_x
+            label_actual_width = available_width_for_labels * label.size_hint_x
+            if label_actual_width > 0:
+                label.text_size = (label_actual_width, None) # Set width, height will adjust automatically
     
     def _on_label_texture_size(self, instance, texture_size):
-        """called when label's rendered text size changes"""
-        # update the label height to match the text height
-        self.label.height = texture_size[1]
-        # update the container height to fit the label plus vertical padding
-        self.height = max(50, texture_size[1] + (self.padding[1] + self.padding[3]))
+        """Callback when any individual label's rendered text size changes."""
+        # Update the specific label's height to match its content
+        instance.height = texture_size[1]
+        
+        # Find the maximum height among all column labels to determine row height
+        max_label_height = 0
+        for label in self.column_labels:
+            max_label_height = max(max_label_height, label.texture_size[1] if label.texture_size else 0)
+            
+        # Set the height of the columns_container to fit the tallest label plus its vertical padding
+        self.columns_container.height = max_label_height + (self.columns_container.padding[1] + self.columns_container.padding[3])
+        
+        # Set the overall AgendaItem (row) height, ensuring a minimum height
+        self.height = max(50, self.columns_container.height + (self.padding[1] + self.padding[3]))
+
     
     def on_size(self, *args):
-        """update background and text size when widget size changes"""
-        self._update_text_size()
+        """Update background when widget size changes."""
         self.update_background()
+        # No need to call _update_column_layout or _draw_column_separators directly here
+        # as columns_container.width/pos binding handles it.
     
     def on_checkbox_toggle(self, checkbox, value):
         """handle checkbox toggle"""
@@ -725,6 +785,38 @@ class PacificaAgendaApp(App):
         layout.add_widget(topbar)
 
         # Create a scrollable list using ScrollView and BoxLayout
+        # Header row for columns
+        header_container = BoxLayout(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=50,
+            padding=(20, 15), # Match AgendaItem's outer padding
+            spacing=15 # Match AgendaItem's outer spacing
+        )
+        with header_container.canvas.before:
+            Color(*StyledButton.hex2rgba(PACIFICA_BLUE, 0.2)) # Light blue header background
+            Rectangle(pos=header_container.pos, size=header_container.size)
+        header_container.bind(pos=lambda inst, val: setattr(inst.canvas.before.children[-1], 'pos', val),
+                              size=lambda inst, val: setattr(inst.canvas.before.children[-1], 'size', val))
+
+        # Placeholder for checkbox column
+        header_container.add_widget(Widget(size_hint_x=None, width=40))
+
+        # Container for header labels to match AgendaItem's internal structure
+        header_labels_container = BoxLayout(
+            orientation="horizontal",
+            size_hint_x=1,
+            spacing=COLUMN_SPACING,
+            padding=COLUMN_PAD # Match AgendaItem's internal column padding
+        )
+        header_labels_container.add_widget(Label(text="Date", size_hint_x=COLUMN_SIZES["date"], halign="left", valign="middle", color=TEXT_COLOR, font_size=26, bold=True))
+        header_labels_container.add_widget(Label(text="Section", size_hint_x=COLUMN_SIZES["section"], halign="left", valign="middle", color=TEXT_COLOR, font_size=26, bold=True))
+        header_labels_container.add_widget(Label(text="Item", size_hint_x=COLUMN_SIZES["item"], halign="left", valign="middle", color=TEXT_COLOR, font_size=26, bold=True))
+        header_labels_container.add_widget(Label(text="Notes", size_hint_x=COLUMN_SIZES["notes"], halign="left", valign="middle", color=TEXT_COLOR, font_size=26, bold=True))
+        
+        layout.add_widget(header_container)
+        header_container.add_widget(header_labels_container)
+
         scroll = ScrollView(size_hint=(1, 1), scroll_distance=100, scroll_wheel_distance=100) # Increased scroll speed
         self.items_container = BoxLayout(orientation='vertical', size_hint_y=None, spacing=2)
         self.items_container.bind(minimum_height=self.items_container.setter('height'))
@@ -750,27 +842,25 @@ class PacificaAgendaApp(App):
             # only mark pre-selected if flagged Y
             include_flag = str(row.get("Include in Summary for Mayor", "")).upper() == "Y"
 
-            date = str(row.get("MEETING DATE", "")).strip()
-            sec = str(row.get("AGENDA SECTION", "")).replace("\n", " ").replace("•", "-").strip()
-            if sec == "nan":
-                sec = "placeholder"
-            item = str(row.get("AGENDA ITEM", "")).replace("\n", " ").replace("•", "-").strip()
-            if item == "nan":
-                item = "unnamed item"
-            notes = ""
+            # Extract individual column data
+            date_text = str(row.get("MEETING DATE", "")).strip()
+            section_text = str(row.get("AGENDA SECTION", "")).replace("\n", " ").replace("•", "-").strip()
+            if section_text == "nan":
+                section_text = "placeholder" # Or suitable default/empty string
+            item_text = str(row.get("AGENDA ITEM", "")).replace("\n", " ").replace("•", "-").strip()
+            if item_text == "nan":
+                item_text = "unnamed item" # Or suitable default/empty string
+            notes_text = ""
             if pd.notna(row.get("NOTES")):
                 n = str(row["NOTES"]).replace("\n", " ").replace("•", "-").strip()
                 if n and n.lower() != "nan":
-                    notes = n
+                    notes_text = n
 
-            display = f"{date} | {sec} | {item}"
-            if notes:
-                display += f" ({notes})"
-
-            widget = AgendaItem(display, idx, self)
+            # Instantiate AgendaItem with individual column data
+            widget = AgendaItem(date_text, section_text, item_text, notes_text, idx, self)
             widget.checkbox.active = include_flag
             widget.selected = include_flag
-            widget.update_background()
+            # widget.update_background() # update_background is called by _setup_initial_size in AgendaItem constructor
 
             self.items_container.add_widget(widget)
             if include_flag:
@@ -836,12 +926,12 @@ class PacificaAgendaApp(App):
         # Optional debug console under generation output if enabled
         if CONF["debug"]:
             self.debug_console = TextInput(
-                readonly=True,
-                size_hint_y=0.4,
-                font_name="Courier" if platform != "ios" else None,
-                background_color=[0.1, 0.1, 0.1, 1],
-                foreground_color=[1, 1, 1, 1],
-            )
+            readonly=True,
+            size_hint_y=0.4,
+            font_name="Courier" if platform != "ios" else None,
+            background_color=[0.1, 0.1, 0.1, 1],
+            foreground_color=[1, 1, 1, 1],
+        )
             layout.add_widget(self.debug_console)
             # redirect stdout/stderr
             sys.stdout = self
@@ -1172,13 +1262,18 @@ class PacificaAgendaApp(App):
         self._navigate_to("generation")
 
         # start backend thread
-        self.backend.generate_report(
-            rows,
-            token_callback=self._token_cb,
-            done_callback=self._done_cb,
-            cancel_event=self.generation_cancel_event,
-            prompt_template=self.current_prompt_template,
-        )
+        try:
+            self.backend.generate_report(
+                rows,
+                token_callback=self._token_cb,
+                done_callback=self._done_cb,
+                error_callback=self._err_cb, # Ensure error_callback is passed
+                cancel_event=self.generation_cancel_event,
+                prompt_template=self.current_prompt_template,
+            )
+        except RuntimeError as exc:
+            self._show_error("Model Error", str(exc))
+            self.screen_manager.current = "review" # Go back to review screen
 
     def _cancel_generation(self):
         self.generation_cancel_event.set()
