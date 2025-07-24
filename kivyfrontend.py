@@ -990,7 +990,7 @@ class PacificaAgendaApp(App):
         back_btn.bind(on_release=lambda *_: self._navigate_to("home"))
         header.add_widget(back_btn)
         
-        title = Label(text="[b]Help & Instructions[/b]", markup=True, font_size=32, color=[0, 0, 0, 1])
+        title = Label(text="[b]Help & Instructions[/b]", markup=True, font_size=50, color=[0, 0, 0, 1])
         header.add_widget(title)
         header.add_widget(Widget(size_hint=(None, None), width=150))  # spacer to balance title
         root.add_widget(header)
@@ -1001,31 +1001,31 @@ class PacificaAgendaApp(App):
         content.bind(minimum_height=content.setter('height'))
         
         help_text = (
-            "[size=24][b]How to Use the Agenda Summary Generator[/b][/size]\n\n"
-            "[size=18][b]Step 1: Prepare Your CSV File[/b][/size]\n"
+            "[size=42][b]How to Use the Agenda Summary Generator[/b][/size]\n\n"
+            "[size=30][b]Step 1: Prepare Your CSV File[/b][/size]\n"
             "• Ensure your CSV file contains the required columns:\n"
             "  - MEETING DATE\n"
             "  - AGENDA SECTION\n"
             "  - AGENDA ITEM\n"
             "  - Include in Summary for Mayor (must be 'Y' for inclusion)\n"
             "  - NOTES (optional)\n\n"
-            "[size=18][b]Step 2: Upload Your File[/b][/size]\n"
+            "[size=30][b]Step 2: Upload Your File[/b][/size]\n"
             "• Click the large upload area on the home screen or\n"
             "• Drag and drop your CSV file directly onto the upload zone\n\n"
-            "[size=18][b]Step 3: Review and Select Items[/b][/size]\n"
+            "[size=30][b]Step 3: Review and Select Items[/b][/size]\n"
             "• Review the automatically filtered agenda items\n"
             "• Items marked 'Y' for 'Include in Summary for Mayor' are pre-selected\n"
             "• Click individual items to toggle selection\n"
             "• Use 'Select All' or 'Deselect All' buttons for bulk actions\n\n"
-            "[size=18][b]Step 4: Generate the Report[/b][/size]\n"
+            "[size=30][b]Step 4: Generate the Report[/b][/size]\n"
             "• Click 'Generate' to start the AI processing\n"
             "• Watch the real-time generation progress\n"
             "• The process uses a two-pass approach for better quality\n\n"
-            "[size=18][b]Step 5: Save Your Report[/b][/size]\n"
+            "[size=30][b]Step 5: Save Your Report[/b][/size]\n"
             "• Once generation is complete, click 'Save'\n"
             "• Choose your save location using the native file dialog\n"
             "• The report will be saved as a Word (.docx) document\n\n"
-            "[size=18][b]Tips for Best Results[/b][/size]\n"
+            "[size=30][b]Tips for Best Results[/b][/size]\n"
             "• Ensure consistent date formatting in your CSV\n"
             "• Keep agenda item descriptions clear and concise\n"
             "• Use the Notes field for additional context when needed\n"
@@ -1064,7 +1064,7 @@ class PacificaAgendaApp(App):
         title = Label(
             text="[b]About & Credits[/b]",
             markup=True,
-            font_size=34,
+            font_size=50,
             color=[0, 0, 0, 1],
             halign="center",
             valign="middle"
@@ -1103,11 +1103,11 @@ class PacificaAgendaApp(App):
             content.add_widget(Widget(size_hint_y=None, height=5)) # reduced spacing
 
         # app title
-        add_centered("City of Pacifica\nAgenda Summary Generator", 32, bold=True)
+        add_centered("City of Pacifica\nAgenda Summary Generator", 46, bold=True)
         content.add_widget(Widget(size_hint_y=None, height=15))
         
         # version
-        add_centered("Version 2.0 - Kivy Edition", 26, bold=True)
+        add_centered("Version 2.0 - Kivy Edition", 38, bold=True)
         content.add_widget(Widget(size_hint_y=None, height=15))
 
         # description
@@ -1115,26 +1115,26 @@ class PacificaAgendaApp(App):
             "A modern, cross-platform app for generating "
             "AI-powered summaries of city council agenda items "
             "for executive review and public transparency.",
-            18,
+            28,
         )
         content.add_widget(Widget(size_hint_y=None, height=20))
 
         # development team header
-        add_centered("Development Team", 24, bold=True)
+        add_centered("Development Team", 36, bold=True)
         content.add_widget(Widget(size_hint_y=None, height=15))
 
         # team details
         add_centered(
             "Project Lead & Developer: [b]Nickolas Yang[/b]\n"
             "Project Coordination: [b]Madeleine Hur[/b]",
-            20,
+            30,
         )
         content.add_widget(Widget(size_hint_y=None, height=20))
         
         add_centered(
             "Built with Python, Kivy, and local LLMs.\n"
             "Powered by llama-cpp-python for privacy-focused AI processing.",
-            16,
+            26,
         )
 
         # let things settle then add to screen
