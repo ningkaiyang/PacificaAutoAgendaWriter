@@ -180,7 +180,7 @@ class StyledButton(Button):
             background_normal="",
             background_color=self.hex2rgba(PACIFICA_BLUE, 1.0),
             color=[1, 1, 1, 1],
-            font_size=16,
+            font_size=18,  # increased default font size
             **kw,
         )
 
@@ -228,7 +228,7 @@ class UploadZone(BoxLayout):
         
         # main upload text/button
         self.upload_label = Label(
-            text="[size=40][b]Click to Upload CSV[/b][/size]\n[size=24]or drag and drop your file here[/size]",
+            text="[size=48][b]Click to Upload CSV[/b][/size]\n[size=28]or drag and drop your file here[/size]",  # increased font sizes
             markup=True,
             halign="center",
             valign="middle",
@@ -242,13 +242,13 @@ class UploadZone(BoxLayout):
         
         # file format hint
         hint_label = Label(
-            text="[size=18]Supported format: CSV files only[/size]",
+            text="[size=22]Supported format: CSV files only[/size]",  # increased font size
             markup=True,
             halign="center",
             valign="middle",
             color=[1, 1, 1, 0.8],  # slightly transparent white
             size_hint_y=None,
-            height=30,
+            height=35,  # increased height
         )
         hint_label.bind(size=lambda inst, *_: inst.setter("text_size")(inst, (inst.width, None)))
         self.add_widget(hint_label)
@@ -310,7 +310,7 @@ class AgendaItem(BoxLayout):
         self.checkbox.bind(active=self.on_checkbox_toggle)
         self.add_widget(self.checkbox)
         
-        # create label for the text content with proper text wrapping
+        # Create label for the text content with proper text wrapping
         self.label = Label(
             text=text,
             markup=False,  # disable markup to avoid formatting issues
@@ -538,6 +538,7 @@ class PacificaAgendaApp(App):
 
     def build(self):
         Window.clearcolor = StyledButton.hex2rgba(PACIFICA_SAND, 1)
+        Window.size = (1280, 720)  # set default window size
         self.backend = AgendaBackend(model_path=CONF["model_path"])
 
         self.current_prompt_template = PROMPT_TEMPLATE  # default
@@ -564,13 +565,22 @@ class PacificaAgendaApp(App):
         root = BoxLayout(orientation="vertical", padding=40, spacing=20)
         scr.add_widget(root)
 
+        # add logo above header if available
+        try:
+            if os.path.exists("logo.png"):
+                from kivy.uix.image import Image as KivyImage
+                logo = KivyImage(source="logo.png", size_hint=(None, None), size=(120, 120))
+                root.add_widget(logo)
+        except Exception:
+            pass
+
         header = Label(
             text="[b]City of Pacifica[/b]\nAgenda Summary Generator",
             markup=True,
-            font_size=32,
+            font_size=36,  # increased font size
             color=[0, 0, 0, 1],
             size_hint_y=None,
-            height=100,
+            height=120,  # increased height for larger font
         )
         root.add_widget(header)
 
@@ -581,16 +591,16 @@ class PacificaAgendaApp(App):
         nav_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=40, spacing=10)
         nav_bar.add_widget(Widget())
 
-        settings_btn = StyledButton(text="Settings", size_hint=(None, None), width=120, height=40)
-        settings_btn.bind(on_release=lambda *_: setattr(self.screen_manager, "current", "settings"))
+        settings_btn = StyledButton(text="Settings", size_hint=(None, None), width=140, height=45, font_size=18)  # increased size and font
+        settings_btn.bind(on_release=lambda *_: self._navigate_to("settings"))
         nav_bar.add_widget(settings_btn)
 
-        help_btn = StyledButton(text="Help", size_hint=(None, None), width=120, height=40)
-        help_btn.bind(on_release=lambda *_: setattr(self.screen_manager, "current", "help"))
+        help_btn = StyledButton(text="Help", size_hint=(None, None), width=140, height=45, font_size=18)  # increased size and font
+        help_btn.bind(on_release=lambda *_: self._navigate_to("help"))
         nav_bar.add_widget(help_btn)
 
-        credits_btn = StyledButton(text="Credits", size_hint=(None, None), width=120, height=40)
-        credits_btn.bind(on_release=lambda *_: setattr(self.screen_manager, "current", "credits"))
+        credits_btn = StyledButton(text="Credits", size_hint=(None, None), width=140, height=45, font_size=18)  # increased size and font
+        credits_btn.bind(on_release=lambda *_: self._navigate_to("credits"))
         nav_bar.add_widget(credits_btn)
 
         nav_bar.add_widget(Widget())
@@ -647,15 +657,15 @@ class PacificaAgendaApp(App):
         layout = BoxLayout(orientation="vertical", padding=20, spacing=15)
         scr.add_widget(layout)
 
-        topbar = BoxLayout(orientation="horizontal", size_hint_y=None, height=40, spacing=10)
-        back_btn = StyledButton(text="Back", width=100, height=40)
-        back_btn.bind(on_release=lambda *_: setattr(self.screen_manager, "current", "home"))  # go back to home
+        topbar = BoxLayout(orientation="horizontal", size_hint_y=None, height=50, spacing=10)  # increased height
+        back_btn = StyledButton(text="Back", width=120, height=50, font_size=18)  # increased size and font
+        back_btn.bind(on_release=lambda *_: self._navigate_to("home"))  # use navigation method
         topbar.add_widget(back_btn)
 
-        self.review_label = Label(text="Items Selected: 0", color=[0, 0, 0, 1])
+        self.review_label = Label(text="Items Selected: 0", color=[0, 0, 0, 1], font_size=18)  # increased font size
         topbar.add_widget(self.review_label)
 
-        gen_btn = StyledButton(text="Generate", width=150, height=40)
+        gen_btn = StyledButton(text="Generate", width=180, height=50, font_size=18)  # increased size and font
         gen_btn.bind(on_release=lambda *_: self._start_generation())
         topbar.add_widget(gen_btn)
 
@@ -668,11 +678,11 @@ class PacificaAgendaApp(App):
         scroll.add_widget(self.items_container)
         layout.add_widget(scroll)
 
-        sel_bar = BoxLayout(size_hint_y=None, height=40, spacing=10)
-        sel_all = StyledButton(text="Select All", width=120, height=40)
+        sel_bar = BoxLayout(size_hint_y=None, height=50, spacing=10)  # increased height
+        sel_all = StyledButton(text="Select All", width=140, height=50, font_size=18)  # increased size and font
         sel_all.bind(on_release=lambda *_: self._select_all_items(True))
         sel_bar.add_widget(sel_all)
-        desel_all = StyledButton(text="Deselect All", width=120, height=40)
+        desel_all = StyledButton(text="Deselect All", width=140, height=50, font_size=18)  # increased size and font
         desel_all.bind(on_release=lambda *_: self._select_all_items(False))
         sel_bar.add_widget(desel_all)
         layout.add_widget(sel_bar)
@@ -739,12 +749,12 @@ class PacificaAgendaApp(App):
         layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
         scr.add_widget(layout)
 
-        top = BoxLayout(orientation="horizontal", size_hint_y=None, height=40, spacing=10)
-        self.back_gen_btn = StyledButton(text="Back", width=100, height=40)
+        top = BoxLayout(orientation="horizontal", size_hint_y=None, height=50, spacing=10)  # increased height
+        self.back_gen_btn = StyledButton(text="Back", width=120, height=50, font_size=18)  # increased size and font
         self.back_gen_btn.bind(on_release=lambda *_: self._cancel_generation())
         top.add_widget(self.back_gen_btn)
 
-        save_btn = StyledButton(text="Save", width=120, height=40)
+        save_btn = StyledButton(text="Save", width=140, height=50, font_size=18)  # increased size and font
         save_btn.disabled = True
         self.save_button = save_btn
         save_btn.bind(on_release=lambda *_: self._save_report())
@@ -755,7 +765,7 @@ class PacificaAgendaApp(App):
         # scrollable log textbox
         self.gen_output = TextInput(
             readonly=True,
-            font_size=14,
+            font_size=16,  # increased font size
             foreground_color=[0, 0, 0, 1],
             background_color=[1, 1, 1, 1],
         )
@@ -797,15 +807,15 @@ class PacificaAgendaApp(App):
         root = BoxLayout(orientation="vertical", padding=20, spacing=20)
         scr.add_widget(root)
 
-        title = Label(text="[b]Settings[/b]", markup=True, font_size=28, size_hint_y=None, height=60)
+        title = Label(text="[b]Settings[/b]", markup=True, font_size=32, size_hint_y=None, height=80, color=[0, 0, 0, 1])  # increased font size and height
         root.add_widget(title)
 
         # Model picker
-        model_box = BoxLayout(orientation="horizontal", size_hint_y=None, height=40, spacing=10)
-        model_lbl = Label(text="Model:", color=[0, 0, 0, 1], size_hint_x=0.2)
-        self.model_path_lbl = Label(text=CONF["model_path"], color=[0, 0, 0, 1], halign="left")
+        model_box = BoxLayout(orientation="horizontal", size_hint_y=None, height=50, spacing=10)  # increased height
+        model_lbl = Label(text="Model:", color=[0, 0, 0, 1], size_hint_x=0.2, font_size=18)  # increased font size
+        self.model_path_lbl = Label(text=CONF["model_path"], color=[0, 0, 0, 1], halign="left", font_size=16)  # increased font size
         self.model_path_lbl.bind(size=lambda inst, *_: inst.setter("text_size")(inst, (inst.width, None)))
-        choose_model = StyledButton(text="Choose", width=100, height=40)
+        choose_model = StyledButton(text="Choose", width=120, height=50, font_size=18)  # increased size and font
         choose_model.bind(on_release=lambda *_: self._choose_model())
         model_box.add_widget(model_lbl)
         model_box.add_widget(self.model_path_lbl)
@@ -813,11 +823,11 @@ class PacificaAgendaApp(App):
         root.add_widget(model_box)
 
         # Prompt picker
-        prompt_box = BoxLayout(orientation="horizontal", size_hint_y=None, height=40, spacing=10)
-        prompt_lbl = Label(text="Prompt File:", color=[0, 0, 0, 1], size_hint_x=0.2)
-        self.prompt_path_lbl = Label(text=CONF.get("prompt_path", ""), color=[0, 0, 0, 1], halign="left")
+        prompt_box = BoxLayout(orientation="horizontal", size_hint_y=None, height=50, spacing=10)  # increased height
+        prompt_lbl = Label(text="Prompt File:", color=[0, 0, 0, 1], size_hint_x=0.2, font_size=18)  # increased font size
+        self.prompt_path_lbl = Label(text=CONF.get("prompt_path", ""), color=[0, 0, 0, 1], halign="left", font_size=16)  # increased font size
         self.prompt_path_lbl.bind(size=lambda inst, *_: inst.setter("text_size")(inst, (inst.width, None)))
-        choose_prompt = StyledButton(text="Choose", width=100, height=40)
+        choose_prompt = StyledButton(text="Choose", width=120, height=50, font_size=18)  # increased size and font
         choose_prompt.bind(on_release=lambda *_: self._choose_prompt())
         prompt_box.add_widget(prompt_lbl)
         prompt_box.add_widget(self.prompt_path_lbl)
@@ -828,9 +838,9 @@ class PacificaAgendaApp(App):
         dbg_switch = ToggleSwitch("Debug Mode", CONF["debug"], self._toggle_debug)
         root.add_widget(dbg_switch)
 
-        btn_bar = BoxLayout(size_hint_y=None, height=40, spacing=10)
-        back_btn = StyledButton(text="Back", width=100, height=40)
-        back_btn.bind(on_release=lambda *_: setattr(self.screen_manager, "current", "home"))  # go back to home
+        btn_bar = BoxLayout(size_hint_y=None, height=50, spacing=10)  # increased height
+        back_btn = StyledButton(text="Back", width=120, height=50, font_size=18)  # increased size and font
+        back_btn.bind(on_release=lambda *_: self._navigate_to("home"))  # use navigation method
         btn_bar.add_widget(back_btn)
         root.add_widget(btn_bar)
 
@@ -919,36 +929,144 @@ class PacificaAgendaApp(App):
     # ---------------------------------------------------------------- Help & Credits
     def _build_help(self):
         scr = HelpScreen(name="help")
-        root = BoxLayout(orientation="vertical", padding=20)
+        root = BoxLayout(orientation="vertical", padding=20, spacing=20)
         scr.add_widget(root)
-        txt = (
-            "[b]How to Use[/b]\n\n"
-            "1. Drag a properly formatted CSV onto the home screen or click Browse.\n"
-            "2. Review the list and (de)select rows.\n"
-            "3. Press Generate – wait until finished.\n"
-            "4. Press Save to export a Word document.\n"
+        
+        # title with back button
+        header = BoxLayout(orientation="horizontal", size_hint_y=None, height=60, spacing=10)
+        back_btn = StyledButton(text="Back", size_hint=(None, None), width=120, height=50, font_size=18)
+        back_btn.bind(on_release=lambda *_: self._navigate_to("home"))
+        header.add_widget(back_btn)
+        
+        title = Label(text="[b]Help & Instructions[/b]", markup=True, font_size=32, color=[0, 0, 0, 1])
+        header.add_widget(title)
+        header.add_widget(Widget())  # spacer
+        root.add_widget(header)
+        
+        # scrollable content
+        scroll = ScrollView()
+        content = BoxLayout(orientation="vertical", spacing=15, size_hint_y=None, padding=20)
+        content.bind(minimum_height=content.setter('height'))
+        
+        help_text = (
+            "[size=24][b]How to Use the Agenda Summary Generator[/b][/size]\n\n"
+            "[size=18][b]Step 1: Prepare Your CSV File[/b][/size]\n"
+            "• Ensure your CSV file contains the required columns:\n"
+            "  - MEETING DATE\n"
+            "  - AGENDA SECTION\n"
+            "  - AGENDA ITEM\n"
+            "  - Include in Summary for Mayor (must be 'Y' for inclusion)\n"
+            "  - NOTES (optional)\n\n"
+            "[size=18][b]Step 2: Upload Your File[/b][/size]\n"
+            "• Click the large upload area on the home screen or\n"
+            "• Drag and drop your CSV file directly onto the upload zone\n\n"
+            "[size=18][b]Step 3: Review and Select Items[/b][/size]\n"
+            "• Review the automatically filtered agenda items\n"
+            "• Items marked 'Y' for 'Include in Summary for Mayor' are pre-selected\n"
+            "• Click individual items to toggle selection\n"
+            "• Use 'Select All' or 'Deselect All' buttons for bulk actions\n\n"
+            "[size=18][b]Step 4: Generate the Report[/b][/size]\n"
+            "• Click 'Generate' to start the AI processing\n"
+            "• Watch the real-time generation progress\n"
+            "• The process uses a two-pass approach for better quality\n\n"
+            "[size=18][b]Step 5: Save Your Report[/b][/size]\n"
+            "• Once generation is complete, click 'Save'\n"
+            "• Choose your save location using the native file dialog\n"
+            "• The report will be saved as a Word (.docx) document\n\n"
+            "[size=18][b]Tips for Best Results[/b][/size]\n"
+            "• Ensure consistent date formatting in your CSV\n"
+            "• Keep agenda item descriptions clear and concise\n"
+            "• Use the Notes field for additional context when needed\n"
+            "• Review the generated content before saving"
         )
-        root.add_widget(Label(text=txt, markup=True, color=[0, 0, 0, 1]))
-        back_btn = StyledButton(text="Back", size_hint=(None, None), width=100, height=40)
-        back_btn.bind(on_release=lambda *_: setattr(self.screen_manager, "current", "home"))  # go back to home
-        root.add_widget(back_btn)
+        
+        help_label = Label(
+            text=help_text,
+            markup=True,
+            color=[0, 0, 0, 1],
+            text_size=(None, None),
+            halign="left",
+            valign="top",
+            size_hint_y=None
+        )
+        help_label.bind(width=lambda inst, width: inst.setter('text_size')(inst, (width - 40, None)))
+        help_label.bind(texture_size=help_label.setter('height'))
+        content.add_widget(help_label)
+        
+        scroll.add_widget(content)
+        root.add_widget(scroll)
+        
         self.screen_manager.add_widget(scr)
 
     def _build_credits(self):
         scr = CreditsScreen(name="credits")
         root = BoxLayout(orientation="vertical", padding=20, spacing=20)
         scr.add_widget(root)
-        root.add_widget(
-            Label(
-                text="[b]Agenda Summary Generator v1.0[/b]\n\nDeveloper: Nickolas Yang\nCoordination: Madeleine Hur\nPowered by local LLMs (llama-cpp-python)",
-                markup=True,
-                halign="center",
-                color=[0, 0, 0, 1],
-            )
+        
+        # title with back button
+        header = BoxLayout(orientation="horizontal", size_hint_y=None, height=60, spacing=10)
+        back_btn = StyledButton(text="Back", size_hint=(None, None), width=120, height=50, font_size=18)
+        back_btn.bind(on_release=lambda *_: self._navigate_to("home"))
+        header.add_widget(back_btn)
+        
+        title = Label(text="[b]About & Credits[/b]", markup=True, font_size=32, color=[0, 0, 0, 1])
+        header.add_widget(title)
+        header.add_widget(Widget())  # spacer
+        root.add_widget(header)
+        
+        # main content in center
+        content_frame = BoxLayout(orientation="vertical", spacing=25, size_hint=(0.8, None), height=400)
+        content_frame.pos_hint = {'center_x': 0.5}
+        
+        # app title
+        app_title = Label(
+            text="[size=36][b]City of Pacifica[/b]\nAgenda Summary Generator[/size]",
+            markup=True,
+            halign="center",
+            color=[0, 0, 0, 1],
+            size_hint_y=None,
+            height=100
         )
-        back_btn = StyledButton(text="Back", size_hint=(None, None), width=100, height=40)
-        back_btn.bind(on_release=lambda *_: setattr(self.screen_manager, "current", "home"))  # go back to home
-        root.add_widget(back_btn)
+        content_frame.add_widget(app_title)
+        
+        # version and description
+        version_info = Label(
+            text="[size=24][b]Version 2.0 - Kivy Edition[/b][/size]\n\n"
+                 "[size=18]A modern, cross-platform application for generating\n"
+                 "AI-powered summaries of city council agenda items\n"
+                 "for executive review and public transparency.[/size]",
+            markup=True,
+            halign="center",
+            color=[0, 0, 0, 1],
+            size_hint_y=None,
+            height=120
+        )
+        content_frame.add_widget(version_info)
+        
+        # credits
+        credits_info = Label(
+            text="[size=20][b]Development Team[/b][/size]\n\n"
+                 "[size=18]Project Lead & Developer: [b]Nickolas Yang[/b]\n"
+                 "Project Coordination: [b]Madeleine Hur[/b]\n\n"
+                 "Built with Python, Kivy, and local LLMs\n"
+                 "Powered by llama-cpp-python for privacy-focused AI processing[/size]",
+            markup=True,
+            halign="center",
+            color=[0, 0, 0, 1],
+            size_hint_y=None,
+            height=140
+        )
+        content_frame.add_widget(credits_info)
+        
+        # add to centered container
+        center_container = BoxLayout()
+        center_container.add_widget(Widget())  # left spacer
+        center_container.add_widget(content_frame)
+        center_container.add_widget(Widget())  # right spacer
+        
+        root.add_widget(center_container)
+        root.add_widget(Widget())  # bottom spacer
+        
         self.screen_manager.add_widget(scr)
 
     # ---------------------------------------------------------------- Generation logic
