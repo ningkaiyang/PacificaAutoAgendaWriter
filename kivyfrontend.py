@@ -52,15 +52,10 @@ Config.set('input', 'mouse', 'mouse,multitouch_on_demand')
 from kivybackend import AgendaBackend, PROMPT_TEMPLATE
 
 # --------------------------------------------------------------------------------------
-# Constants / Config persistence
+# Constants
 # --------------------------------------------------------------------------------------
-CONFIG_FILE = os.path.join(os.path.expanduser("\"~\""), ".pacifica_agenda_gui.json")
-
-DEFAULT_CONF = {
-    "model_path": "language_models/Qwen3-4B-Q6_K.gguf",
-    "prompt_path": "",  # empty => use PROMPT_TEMPLATE embedded
-    "debug": False,
-}
+MODEL_REPO = "unsloth/Qwen3-4B-GGUF"
+MODEL_FILENAME = "Qwen3-4B-Q6_K.gguf"
 
 PACIFICA_BLUE = "#4682B4"  # headers / accents
 PACIFICA_SAND = "#F5F5DC"  # background
@@ -75,27 +70,6 @@ COLUMN_SIZES = {
 }
 COLUMN_PAD = 10     # Padding inside each column's label
 COLUMN_SPACING = 15  # Spacing between columns within an item row
-
-
-def load_conf() -> dict:
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as fp:
-            data = json.load(fp)
-            DEFAULT_CONF.update(data)
-    except Exception:
-        pass
-    return DEFAULT_CONF.copy()
-
-
-def save_conf(conf: dict):
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as fp:
-            json.dump(conf, fp, indent=2)
-    except Exception:
-        pass
-
-
-CONF = load_conf()
 
 # --------------------------------------------------------------------------------------
 # Native file dialog functions
@@ -616,17 +590,47 @@ class PacificaAgendaApp(App):
 
     debug_console: TextInput | None = None
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Config persistence
+        self.config_file = os.path.join(self.user_data_dir, "pacifica_agenda_gui.json")
+        self.CONF = self._load_conf()
+
+    def _load_conf(self) -> dict:
+        default_conf = {
+            "model_path": "",  # Default is empty, will be set on install
+            "prompt_path": "",
+            "debug": False,
+        }
+        try:
+            with open(self.config_file, "r", encoding="utf-8") as fp:
+                data = json.load(fp)
+                default_conf.update(data)
+        except Exception:
+            pass
+        return default_conf
+
+    def _save_conf(self):
+        try:
+            with open(self.config_file, "w", encoding="utf-8") as fp:
+                json.dump(self.CONF, fp, indent=2)
+        except Exception:
+            pass
+
     def build(self):
         Window.clearcolor = StyledButton.hex2rgba(PACIFICA_SAND, 1)
         Window.size = (1280, 720)  # set default window size
         Window.left = (Window.system_size[0] - Window.width + 500) / 2
         Window.top = (Window.system_size[1] - Window.height + 700) / 2
         
-        self.backend = AgendaBackend(model_path=CONF["model_path"])
+        self.backend = AgendaBackend(
+            model_path=self.CONF["model_path"],
+            user_data_dir=self.user_data_dir,
+        )
 
         self.current_prompt_template = PROMPT_TEMPLATE  # default
-        if CONF.get("prompt_path") and os.path.exists(CONF["prompt_path"]):
-            self._load_prompt_from_file(CONF["prompt_path"])
+        if self.CONF.get("prompt_path") and os.path.exists(self.CONF["prompt_path"]):
+            self._load_prompt_from_file(self.CONF["prompt_path"])
 
         self.screen_manager = ScreenManager(transition=SlideTransition(duration=0.25))
         self._build_home()
@@ -635,6 +639,9 @@ class PacificaAgendaApp(App):
         self._build_settings()
         self._build_help()
         self._build_credits()
+
+        # Set initial model status in settings UI
+        self._update_model_status()
 
         # bind drag-and-drop
         if platform in ("win", "linux", "macosx"):
@@ -924,7 +931,7 @@ class PacificaAgendaApp(App):
         layout.add_widget(sv)
 
         # Optional debug console under generation output if enabled
-        if CONF["debug"]:
+        if self.CONF["debug"]:
             self.debug_console = TextInput(
             readonly=True,
             size_hint_y=0.4,
@@ -960,22 +967,22 @@ class PacificaAgendaApp(App):
         title = Label(text="[b]Settings[/b]", markup=True, font_size=32, size_hint_y=None, height=80, color=[0, 0, 0, 1])  # increased font size and height
         root.add_widget(title)
 
-        # Model picker
+        # Model installer
         model_box = BoxLayout(orientation="horizontal", size_hint_y=None, height=60, spacing=10)
         model_lbl = Label(text="Model:", color=[0, 0, 0, 1], size_hint_x=0.2, font_size=20)
-        self.model_path_lbl = Label(text=CONF["model_path"], color=[0, 0, 0, 1], halign="left", font_size=16)
-        self.model_path_lbl.bind(size=lambda inst, *_: inst.setter("text_size")(inst, (inst.width, None)))
-        choose_model = StyledButton(text="Choose", size_hint=(None, None), width=150, height=60)
-        choose_model.bind(on_release=lambda *_: self._choose_model())
+        self.model_status_lbl = Label(text="Checking...", color=[0, 0, 0, 1], halign="left", font_size=16)
+        self.model_status_lbl.bind(size=lambda inst, *_: inst.setter("text_size")(inst, (inst.width, None)))
+        self.install_model_btn = StyledButton(text="Install", size_hint=(None, None), width=150, height=60)
+        self.install_model_btn.bind(on_release=lambda *_: self._install_model())
         model_box.add_widget(model_lbl)
-        model_box.add_widget(self.model_path_lbl)
-        model_box.add_widget(choose_model)
+        model_box.add_widget(self.model_status_lbl)
+        model_box.add_widget(self.install_model_btn)
         root.add_widget(model_box)
 
         # Prompt picker
         prompt_box = BoxLayout(orientation="horizontal", size_hint_y=None, height=60, spacing=10)
         prompt_lbl = Label(text="Prompt File:", color=[0, 0, 0, 1], size_hint_x=0.2, font_size=20)
-        self.prompt_path_lbl = Label(text=CONF.get("prompt_path", ""), color=[0, 0, 0, 1], halign="left", font_size=16)
+        self.prompt_path_lbl = Label(text=self.CONF.get("prompt_path", ""), color=[0, 0, 0, 1], halign="left", font_size=16)
         self.prompt_path_lbl.bind(size=lambda inst, *_: inst.setter("text_size")(inst, (inst.width, None)))
         choose_prompt = StyledButton(text="Choose", size_hint=(None, None), width=150, height=60)
         choose_prompt.bind(on_release=lambda *_: self._choose_prompt())
@@ -985,7 +992,7 @@ class PacificaAgendaApp(App):
         root.add_widget(prompt_box)
 
         # Debug switch
-        dbg_switch = ToggleSwitch("Debug Mode", CONF["debug"], self._toggle_debug)
+        dbg_switch = ToggleSwitch("Debug Mode", self.CONF["debug"], self._toggle_debug)
         root.add_widget(dbg_switch)
 
         btn_bar = BoxLayout(size_hint_y=None, height=60, spacing=10)
@@ -997,36 +1004,46 @@ class PacificaAgendaApp(App):
         self.screen_manager.add_widget(scr)
 
     # pickers
-    def _choose_model(self):
-        # try native dialog first
-        filters = [("GGUF Model files", "*.gguf"), ("Binary Model files", "*.bin"), ("All files", "*.*")]
-        selection = native_open_file_dialog(title="Select Model File", file_types=filters)
-        
-        if selection:
-            CONF["model_path"] = selection[0]
-            self.model_path_lbl.text = selection[0]
-            save_conf(CONF)
-            # reload model async
-            self.backend.model_path = selection[0]
-            self.backend._load_llm_model_async()
-            return
-        
-        # fallback to kivy file chooser
-        chooser = FileChooserListView(path=os.getcwd(), filters=["*.gguf", "*.bin"])
-        popup = Popup(title="Select Model", content=chooser, size_hint=(0.9, 0.9))
-
-        def _sel(_, selection):
-            if selection:
-                CONF["model_path"] = selection[0]
-                self.model_path_lbl.text = selection[0]
-                save_conf(CONF)
-                popup.dismiss()
-                # reload model async
-                self.backend.model_path = selection[0]
+    @mainthread
+    def _update_model_status(self):
+        model_path = self.CONF.get("model_path")
+        if model_path and os.path.exists(model_path):
+            self.model_status_lbl.text = f"Installed at {model_path}"
+            self.install_model_btn.disabled = True
+            # Also update backend instance if needed
+            if not self.backend.llm_model and self.backend.model_path:
                 self.backend._load_llm_model_async()
+        else:
+            self.model_status_lbl.text = f"Not Installed ({MODEL_FILENAME})"
+            self.install_model_btn.disabled = False
 
-        chooser.bind(on_submit=_sel)
-        popup.open()
+    def _install_model(self):
+        self.model_status_lbl.text = "Downloading... (may take a while)"
+        self.install_model_btn.disabled = True
+        
+        # Start download in a thread
+        threading.Thread(
+            target=self.backend.download_model,
+            args=(self._on_model_download_complete, self._on_model_download_error),
+            daemon=True
+        ).start()
+
+    @mainthread
+    def _on_model_download_complete(self, model_path: str):
+        self._show_info("Model downloaded successfully!")
+        self.CONF["model_path"] = model_path
+        self._save_conf()
+
+        # The backend's download_model method already loads the model instance.
+        # We just need to update the path attribute in the backend for future runs.
+        self.backend.model_path = model_path
+        # The model is already loaded in backend.llm_model, so we just update UI.
+        self._update_model_status()
+
+    @mainthread
+    def _on_model_download_error(self, exc: Exception):
+        self._show_error("Model Download Failed", traceback.format_exc())
+        self._update_model_status()
 
     def _choose_prompt(self):
         # try native dialog first
@@ -1041,9 +1058,9 @@ class PacificaAgendaApp(App):
         selection = native_open_file_dialog(title="Select Prompt File", file_types=filters)
         
         if selection:
-            CONF["prompt_path"] = selection[0]
+            self.CONF["prompt_path"] = selection[0]
             self.prompt_path_lbl.text = selection[0]
-            save_conf(CONF)
+            self._save_conf()
             self._load_prompt_from_file(selection[0])
             return
         
@@ -1053,9 +1070,9 @@ class PacificaAgendaApp(App):
 
         def _sel(_, selection):
             if selection:
-                CONF["prompt_path"] = selection[0]
+                self.CONF["prompt_path"] = selection[0]
                 self.prompt_path_lbl.text = selection[0]
-                save_conf(CONF)
+                self._save_conf()
                 popup.dismiss()
                 self._load_prompt_from_file(selection[0])
 
@@ -1072,8 +1089,8 @@ class PacificaAgendaApp(App):
             self._show_error("Prompt Load Error", str(exc))
 
     def _toggle_debug(self, value: bool):
-        CONF["debug"] = value
-        save_conf(CONF)
+        self.CONF["debug"] = value
+        self._save_conf()
         self._show_info("Debug mode will apply on next app restart.")
 
     # ---------------------------------------------------------------- Help & Credits

@@ -12,17 +12,18 @@ This application streamlines the process of creating agenda summaries for the Ci
 *   **Configurable:** Allows users to select their own LLM model file and custom prompt templates through a settings menu.
 
 ## How to Use
-1.  **Prepare CSV:** Ensure your agenda data is in a `.csv` file with the required columns.
-2.  **Launch App:** Run `python3 kivyfrontend.py`.
-3.  **Upload File:** Drag and drop your `.csv` file onto the main window or click to browse.
-4.  **Review Items:** Deselect any items you wish to exclude from the summary.
-5.  **Generate:** Click the "Generate" button to start the AI process.
-6.  **Save:** Once complete, save the report as a `.docx` file.
+1.  **Launch App:** Run `python3 kivyfrontend.py`.
+2.  **Install Model:** On first launch, go to `Settings` and click `Install` to download the required AI model. This is a one-time setup.
+3.  **Prepare CSV:** Ensure your agenda data is in a `.csv` file with the required columns.
+4.  **Upload File:** Drag and drop your `.csv` file onto the main window or click to browse.
+5.  **Review Items:** Deselect any items you wish to exclude from the summary.
+6.  **Generate:** Click the "Generate" button to start the AI process.
+7.  **Save:** Once complete, save the report as a `.docx` file.
 
 ## Current Status
 This application is at **Version 2.0 (Kivy Edition)**. It has been rebuilt from the ground up using the Kivy framework to provide a more robust and feature-rich cross-platform experience.
 
-*   **Local LLM Required:** The application relies on a local GGUF-format model file (e.g., `Qwen3-4B-Q6_K.gguf`). The path can be configured in the Settings menu.
+*   **Built-in Model Installer:** The application includes a one-click installer for the required AI model (`unsloth/Qwen3-4B-GGUF`). The model is downloaded to a local application data folder, ensuring it's always available.
 *   **Placeholders:** The generated Word document includes placeholders for manual input (e.g., "TBD" items, "Significant Items Completed Since [Date]") to allow for final human review and additions.
 
 ## TBD
@@ -31,7 +32,6 @@ This application is at **Version 2.0 (Kivy Edition)**. It has been rebuilt from 
 *   **GUI Experience:** Working on improving the overall user interface for smoother navigation and better usability - add Pacifica branding and make neater fun stuff.
 *   **Improved Error Messages:** Add more details to why a .csv import fails, potentially scanning across set of expected column headers in the .csv until a mismatch to what is expected occurs, and then saying that it expects column 'A' to be 'MEETING DATE', etc.
 *   **Ignoring Certain Statements:** Parse out and ignore everything denoted by brackets [] in what is sent to the LLM.
-*   **Settings Menu: Model Installer Button:** Create a settings menu and appdata folder and allow for installing of Qwen model from huggingface.
 *   **Settings Menu: Prompt Selection:** Create a settings menu and appdata folder and allow for flexible prompt modification in the back-end.
 *   **Settings Menu: Debug Mode:** Create a settings menu and appdata folder and allow for toggling a Debug Mode, where when enabled a terminal appears where the PASS 1 and PASS 2 thoughts are outputted, alongside input values and token speeds and memory, to see and help debug on any OS.
 

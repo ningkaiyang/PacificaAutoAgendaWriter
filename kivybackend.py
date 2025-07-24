@@ -25,6 +25,10 @@ from docx import Document
 from docx.shared import Inches, Pt
 from llama_cpp import Llama
 
+# Model to download
+MODEL_REPO = "unsloth/Qwen3-4B-GGUF"
+MODEL_FILENAME = "Qwen3-4B-Q6_K.gguf"
+
 # Optional – only for simple speed / memory debug
 try:
     import resource
@@ -207,12 +211,12 @@ class AgendaBackend:
     the public methods of this class.
     """
 
-    def __init__(self, model_path: str | None = None):
-        self.model_path = (
-            model_path or "language_models/Qwen3-4B-Q6_K.gguf"
-        )
+    def __init__(self, model_path: str | None = None, user_data_dir: str | None = None):
+        self.user_data_dir = user_data_dir
+        self.model_path = model_path
         self.llm_model: Llama | None = None
-        self._load_llm_model_async()  # Non-blocking
+        if self.model_path and os.path.exists(self.model_path):
+            self._load_llm_model_async()  # Non-blocking
 
     # ------------------------------------------------------------------ CSV helpers
     @staticmethod
@@ -240,7 +244,7 @@ class AgendaBackend:
     def _load_llm_model_async(self):
         def _loader():
             try:
-                if not os.path.exists(self.model_path):
+                if not self.model_path or not os.path.exists(self.model_path):
                     print(f"[backend] Model file not found: {self.model_path}")
                     return
                 with suppress_stderr():
@@ -256,6 +260,49 @@ class AgendaBackend:
                 print(f"[backend] Failed to load model: {exc}")
 
         threading.Thread(target=_loader, daemon=True).start()
+
+    def download_model(
+        self,
+        done_callback: Callable[[str], None] | None = None,
+        error_callback: Callable[[Exception], None] | None = None,
+    ):
+        """Downloads model from HuggingFace Hub to user_data_dir."""
+        try:
+            if not self.user_data_dir:
+                raise ValueError("user_data_dir not set in backend")
+
+            models_dir = os.path.join(self.user_data_dir, "models")
+
+            print(f"[backend] Downloading model to: {models_dir}")
+
+            # Suppress llama.cpp noise during download/load
+            with suppress_stderr():
+                # Llama.from_pretrained downloads AND loads the model, returning an instance.
+                new_llm_instance = Llama.from_pretrained(
+                    repo_id=MODEL_REPO,
+                    filename=MODEL_FILENAME,
+                    local_dir=models_dir,
+                    local_dir_use_symlinks=False,  # Use False for better cross-platform/packaging support
+                    verbose=False,  # Set to False to avoid duplicate progress info
+                    # Add other loading params for consistency
+                    chat_format="chatml",
+                    n_ctx=10000,
+                    n_threads=default_threads(),
+                )
+
+            # The model is now loaded, assign it to the backend
+            self.llm_model = new_llm_instance
+            # Get the actual path string from the instance
+            final_model_path = self.llm_model.model_path
+
+            print(f"[backend] Model downloaded and loaded from: {final_model_path}")
+            if done_callback:
+                done_callback(final_model_path)  # Pass the string path back to the frontend
+
+        except Exception as e:
+            traceback.print_exc()
+            if error_callback:
+                error_callback(e)
 
     # ------------------------------------------------------------------ Public generation API
     def generate_report(
