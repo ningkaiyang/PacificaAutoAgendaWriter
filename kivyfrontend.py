@@ -176,11 +176,14 @@ class StyledButton(Button):
     """Flat button with Pacifica colours."""
 
     def __init__(self, **kw):
+        # set a default font_size if not provided by the caller
+        if "font_size" not in kw:
+            kw["font_size"] = 18  # increased default font size
+
         super().__init__(
             background_normal="",
             background_color=self.hex2rgba(PACIFICA_BLUE, 1.0),
             color=[1, 1, 1, 1],
-            font_size=18,  # increased default font size
             **kw,
         )
 
@@ -539,6 +542,9 @@ class PacificaAgendaApp(App):
     def build(self):
         Window.clearcolor = StyledButton.hex2rgba(PACIFICA_SAND, 1)
         Window.size = (1280, 720)  # set default window size
+        Window.left = (Window.system_size[0] - Window.width + 500) / 2
+        Window.top = (Window.system_size[1] - Window.height + 700) / 2
+        
         self.backend = AgendaBackend(model_path=CONF["model_path"])
 
         self.current_prompt_template = PROMPT_TEMPLATE  # default
@@ -558,6 +564,30 @@ class PacificaAgendaApp(App):
             Window.bind(on_dropfile=self._on_file_drop)
 
         return self.screen_manager
+
+    def _navigate_to(self, screen_name: str):
+        """navigate to a screen with proper slide direction"""
+        current_screen = self.screen_manager.current
+        
+        # determine slide direction based on navigation flow
+        if current_screen == "home":
+            # going from home to any other screen slides left
+            self.screen_manager.transition.direction = "left"
+        elif screen_name == "home":
+            # going back to home from any screen slides right
+            self.screen_manager.transition.direction = "right"
+        elif current_screen == "review" and screen_name == "generation":
+            # going from review to generation slides left
+            self.screen_manager.transition.direction = "left"
+        elif current_screen == "generation" and screen_name == "review":
+            # going back from generation to review slides right
+            self.screen_manager.transition.direction = "right"
+        else:
+            # default direction for other transitions
+            self.screen_manager.transition.direction = "left"
+        
+        # change to the new screen
+        self.screen_manager.current = screen_name
 
     # ---------------------------------------------------------------- Home
     def _build_home(self):
@@ -649,7 +679,7 @@ class PacificaAgendaApp(App):
             return
         # go to review
         self._populate_review_list()
-        self.screen_manager.current = "review"
+        self._navigate_to("review")
 
     # ---------------------------------------------------------------- Review screen
     def _build_review(self):
@@ -990,7 +1020,7 @@ class PacificaAgendaApp(App):
             size_hint_y=None
         )
         help_label.bind(width=lambda inst, width: inst.setter('text_size')(inst, (width - 40, None)))
-        help_label.bind(texture_size=help_label.setter('height'))
+        help_label.bind(texture_size=lambda inst, size: setattr(inst, 'height', size[1]))  # let's just grab the height from the texture_size list
         content.add_widget(help_label)
         
         scroll.add_widget(content)
@@ -1078,21 +1108,20 @@ class PacificaAgendaApp(App):
         self.gen_output.text = "Generating...\n"
         self.save_button.disabled = True
         self.generation_cancel_event.clear()
-        self.screen_manager.current = "generation"
+        self._navigate_to("generation")
 
         # start backend thread
         self.backend.generate_report(
             rows,
             token_callback=self._token_cb,
             done_callback=self._done_cb,
-            error_callback=self._err_cb,
             cancel_event=self.generation_cancel_event,
             prompt_template=self.current_prompt_template,
         )
 
     def _cancel_generation(self):
         self.generation_cancel_event.set()
-        self.screen_manager.current = "review"
+        self._navigate_to("review")
 
     # backend callbacks
     def _token_cb(self, txt: str):
