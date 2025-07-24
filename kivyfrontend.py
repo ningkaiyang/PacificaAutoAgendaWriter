@@ -743,31 +743,34 @@ class PacificaAgendaApp(App):
 
     def _populate_review_list(self):
         self.selected_indices.clear()
-        
-        # Clear existing items
         self.items_container.clear_widgets()
-        
-        # Add each item as a widget
+
         for idx, row in enumerate(self.filtered_items):
+            # only mark pre-selected if flagged Y
+            include_flag = str(row.get("Include in Summary for Mayor", "")).upper() == "Y"
+
             date = str(row.get("MEETING DATE", "")).strip()
-            sec = str(row.get("AGENDA SECTION", "")).replace("\\n", " ").replace("•", "-").strip()
-            item = str(row.get("AGENDA ITEM", "")).replace("\\n", " ").replace("•", "-").strip()
+            sec = str(row.get("AGENDA SECTION", "")).replace("\n", " ").replace("•", "-").strip()
+            item = str(row.get("AGENDA ITEM", "")).replace("\n", " ").replace("•", "-").strip()
             notes = ""
             if pd.notna(row.get("NOTES")):
-                n = str(row["NOTES"]).replace("\\n", " ").replace("•", "-").strip()
+                n = str(row["NOTES"]).replace("\n", " ").replace("•", "-").strip()
                 if n and n.lower() != "nan":
                     notes = n
-            
-            # Create display text without markup formatting issues
+
             display = f"{date} | {sec} | {item}"
             if notes:
                 display += f" ({notes})"
-            
-            # Create and add the item widget
-            item_widget = AgendaItem(display, idx, self)
-            self.items_container.add_widget(item_widget)
-            self.selected_indices.add(idx)
-        
+
+            widget = AgendaItem(display, idx, self)
+            widget.checkbox.active = include_flag
+            widget.selected = include_flag
+            widget.update_background()
+
+            self.items_container.add_widget(widget)
+            if include_flag:
+                self.selected_indices.add(idx)
+
         self.review_label.text = f"Items Selected: {len(self.selected_indices)}"
 
     def _select_all_items(self, select=True):

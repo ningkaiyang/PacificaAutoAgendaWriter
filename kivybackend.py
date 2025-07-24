@@ -220,17 +220,21 @@ class AgendaBackend:
         return all(h in df.columns for h in REQUIRED_HEADERS)
 
     def process_csv(self, filepath: str) -> tuple[pd.DataFrame, List[pd.Series]]:
-        """Read CSV, validate headers, filter rows → return (df, filtered_items)."""
+        """Read CSV, validate headers, filter rows → return (df, all_items)."""
         df = pd.read_csv(filepath)
         if not self._validate_headers(df):
             raise ValueError("Selected CSV is missing required columns.")
-        filtered: List[pd.Series] = [
-            row for _, row in df.iterrows()
-            if str(row.get("Include in Summary for Mayor", "")).upper() == "Y"
-        ]
-        if not filtered:
-            raise RuntimeError("No rows marked 'Y' for inclusion.")
-        return df, filtered
+
+        # only keep rows where MEETING DATE starts with a digit – actual agenda items
+        all_items: List[pd.Series] = []
+        for _, row in df.iterrows():
+            meeting_date = str(row.get("MEETING DATE", "")).strip()
+            if meeting_date and meeting_date[0].isdigit():
+                all_items.append(row)
+
+        if not all_items:
+            raise RuntimeError("No valid agenda item rows found in the CSV.")
+        return df, all_items
 
     # ------------------------------------------------------------------ LLM loading
     def _load_llm_model_async(self):
