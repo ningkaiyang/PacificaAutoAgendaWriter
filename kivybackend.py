@@ -125,11 +125,11 @@ class GUITokenFilter:
 # Constant definitions (copied from original file)
 # --------------------------------------------------------------------------------------
 REQUIRED_HEADERS: List[str] = [
-    "MEETING DATE", "AGENDA ITEM", "DEPT", "AGENDA SECTION", "ACTION",
-    "ATTY REVIEW REQ'D", "FIN REVIEW REQ'D", "DUE TO CAO / FIN", "DRAFT TO CM",
-    "MAYOR MTG", "MT FINAL DUE", "AGENDA PUBLISH", "NOTES", "EXCEPTIONS",
-    "NOTICING REQ;\nREGULATORY DEADLINES", "CONFLICT OF INTEREST REVIEW NEEDED (Y / N)",
-    "HIGHLIGHT IN CWP", "Include in Summary for Mayor"
+    "MEETING DATE",
+    "AGENDA SECTION",
+    "AGENDA ITEM",
+    "NOTES",
+    "Include in Summary for Mayor",
 ]
 
 PROMPT_TEMPLATE = """You are an expert city clerk responsible for creating agenda summaries for the City Council. Your task is to take a list of agenda items for a specific meeting date and format them into a clear, concise report.
@@ -220,14 +220,23 @@ class AgendaBackend:
 
     # ------------------------------------------------------------------ CSV helpers
     @staticmethod
-    def _validate_headers(df: pd.DataFrame) -> bool:
-        return all(h in df.columns for h in REQUIRED_HEADERS)
+    def _validate_headers(df: pd.DataFrame):
+        """Check for required headers and raise ValueError if any are missing."""
+        missing_headers = [h for h in REQUIRED_HEADERS if h not in df.columns]
+        if missing_headers:
+            missing_str = ", ".join(f"'{h}'" for h in missing_headers)
+            raise ValueError(f"CSV file is missing required columns: {missing_str}")
 
     def process_csv(self, filepath: str) -> tuple[pd.DataFrame, List[pd.Series]]:
         """Read CSV, validate headers, filter rows → return (df, all_items)."""
-        df = pd.read_csv(filepath)
-        if not self._validate_headers(df):
-            raise ValueError("Selected CSV is missing required columns.")
+        try:
+            df = pd.read_csv(filepath)
+        except Exception as e:
+            # Catch file read errors (e.g., file not found, permission error)
+            # and pandas parsing errors.
+            raise ValueError(f"Failed to read or parse CSV file: {e}")
+
+        self._validate_headers(df)  # Will raise ValueError if invalid
 
         # only keep rows where MEETING DATE starts with a digit – actual agenda items
         all_items: List[pd.Series] = []
