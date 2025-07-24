@@ -1,28 +1,28 @@
 # City of Pacifica - Agenda Summary Generator
 
 ## Overview
-The "City of Pacifica - Agenda Summary Generator" is a desktop application designed to streamline the process of summarizing city council agenda items. It allows users to upload a specially formatted CSV file, automatically filters relevant items, uses a local Large Language Model (LLM) to generate concise summaries, and compiles them into a professionally formatted Microsoft Word (.docx) document.
-
-**Goal:** To simplify the process of creating agenda summaries, especially for officials like the City of Pacifica clerk, by automating the transformation of raw agenda data into a digestible report.
+This application streamlines the process of creating agenda summaries for the City of Pacifica's City Council meetings. It ingests a structured CSV file, uses a local Large Language Model (LLM) to summarize and categorize agenda items, and generates a formatted Microsoft Word document ready for review.
 
 ## Key Features
-*   **CSV File Upload:** Easily import agenda data via drag-and-drop or file selection.
-*   **Data Validation:** Ensures your CSV file has all the necessary columns for accurate processing.
-*   **Intelligent Filtering:** Automatically identifies agenda items marked for inclusion in the summary report.
-*   **Review & Selection:** Provides a user-friendly interface to review and select specific items before summarization.
-*   **AI-Powered Summarization:** Utilizes a local LLM (Large Language Model) to generate concise summaries of each agenda item.
-*   **Professional Document Generation:** Creates a well-formatted Microsoft Word (.docx) document ready for review and distribution.
+*   **CSV Ingestion:** Parses agenda items from a `.csv` file.
+*   **AI-Powered Summarization:** Utilizes a two-pass approach with a local LLM for high-quality, privacy-focused content generation.
+*   **Automated Formatting:** Creates a professionally formatted `.docx` report with proper headers, sections, and styling.
+*   **Cross-Platform GUI:** Built with Kivy for a consistent experience on Windows, macOS, and Linux.
+*   **User-Friendly Interface:** Features drag-and-drop file uploads, item review and selection, and real-time generation progress.
+*   **Configurable:** Allows users to select their own LLM model file and custom prompt templates through a settings menu.
 
 ## How to Use
-1.  **Prepare Your CSV File:** Ensure your .csv file contains the required headers and data, especially the "Include in Summary for Mayor" column, marked with 'Y' for items you want to include.
-2.  **Upload Your File:** On the "Home" tab of the application, drag your prepared .csv file into the designated area or click the button to select it from your computer.
-3.  **Review and Select Items:** After a successful upload, the application will display a list of all agenda items identified for potential inclusion. All items are selected by default, but you can uncheck any item you wish to exclude.
-4.  **Generate the Report:** Click the "Generate Report" button. The application will then process the selected items, generate summaries using its local AI, and prepare the Word document.
-5.  **Save Your Document:** A "Save As" dialog will appear. Choose a name and location to save your new Microsoft Word (.docx) report.
+1.  **Prepare CSV:** Ensure your agenda data is in a `.csv` file with the required columns.
+2.  **Launch App:** Run `python3 kivyfrontend.py`.
+3.  **Upload File:** Drag and drop your `.csv` file onto the main window or click to browse.
+4.  **Review Items:** Deselect any items you wish to exclude from the summary.
+5.  **Generate:** Click the "Generate" button to start the AI process.
+6.  **Save:** Once complete, save the report as a `.docx` file.
 
 ## Current Status
-This application is currently in development (version 1.0) and serves as a powerful tool to automate parts of the agenda summary process.
-*   **Local LLM Required:** The application relies on a local LLM model file (e.g., `gemma-2b-it.gguf`) to be present in the same directory as the executable.
+This application is at **Version 2.0 (Kivy Edition)**. It has been rebuilt from the ground up using the Kivy framework to provide a more robust and feature-rich cross-platform experience.
+
+*   **Local LLM Required:** The application relies on a local GGUF-format model file (e.g., `Qwen3-4B-Q6_K.gguf`). The path can be configured in the Settings menu.
 *   **Placeholders:** The generated Word document includes placeholders for manual input (e.g., "TBD" items, "Significant Items Completed Since [Date]") to allow for final human review and additions.
 
 ## TBD
@@ -30,16 +30,13 @@ This application is currently in development (version 1.0) and serves as a power
 *   **Help Tab Improvements:** Planning to enhance the help tab with more detailed instructions and troubleshooting tips
 *   **GUI Experience:** Working on improving the overall user interface for smoother navigation and better usability - add Pacifica branding and make neater fun stuff.
 *   **Improved Error Messages:** Add more details to why a .csv import fails, potentially scanning across set of expected column headers in the .csv until a mismatch to what is expected occurs, and then saying that it expects column 'A' to be 'MEETING DATE', etc.
-*   **Parsing ALL rows:** Parse and display ALL rows in the checkbox menu, and only check the ones marked Y, to allow for overall viewing of spreadsheet within app. Make checkbox menu more condensed and optimized quicker to load because it lags right now.
 *   **Ignoring Certain Statements:** Parse out and ignore everything denoted by brackets [] in what is sent to the LLM.
-*   **Back Button Stoppage:** Back button from generation screen cancels the LLM generation running in the background.
 *   **Settings Menu: Model Selection:** Create a settings menu and allow for flexible model selection from a specific folder/directory.
 *   **Settings Menu: Prompt Selection:** Create a settings menu and allow for flexible prompt modification in the back-end.
 *   **Settings Menu: Debug Mode:** Create a settings menu and allow for toggling a Debug Mode, where when enabled a terminal appears where the PASS 1 and PASS 2 thoughts are outputted, alongside input values and token speeds and memory, to see and help debug on any OS.
-*   **Drag and Drop:** Fix drag and drop for .csv input.
 
 ## Technical Stack
-*   **GUI:** `customtkinter`
+*   **GUI:** `Kivy`
 *   **Data Processing:** `pandas`
 *   **Local LLM Interaction:** `llama-cpp-python`
 *   **Word Document Generation:** `python-docx`
