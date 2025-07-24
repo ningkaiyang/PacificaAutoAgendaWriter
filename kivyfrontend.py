@@ -43,6 +43,8 @@ from kivy.uix.screenmanager import Screen, ScreenManager, SlideTransition
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
 from kivy.uix.widget import Widget
+from kivy.config import Config
+Config.set('input', 'mouse', 'mouse,multitouch_on_demand')
 
 from kivybackend import AgendaBackend, PROMPT_TEMPLATE
 
@@ -266,7 +268,7 @@ class PacificaAgendaApp(App):
         root.add_widget(drop_area)
 
         browse_box = BoxLayout(size_hint_y=None, height=50, padding=(0, 10, 0, 0))
-        browse_btn = StyledButton(text="Browse CSV", size_hint=(None, None), width=200, height=50)
+        browse_btn = StyledButton(text="Click to Upload CSV", size_hint=(None, None), width=200, height=50)
         browse_btn.bind(on_release=lambda *_: self._open_file_browser("csv"))
         browse_box.add_widget(Widget())
         browse_box.add_widget(browse_btn)
@@ -301,7 +303,7 @@ class PacificaAgendaApp(App):
         chooser = FileChooserListView(filters=["*.csv"] if filetype == "csv" else None, path=os.getcwd())
         popup = Popup(title="Select CSV", content=chooser, size_hint=(0.9, 0.9))
 
-        def _file_chosen(instance, selection):
+        def _file_chosen(instance, selection, touch):
             if selection:
                 popup.dismiss()
                 self._process_csv(selection[0])

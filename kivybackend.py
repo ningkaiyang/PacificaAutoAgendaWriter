@@ -212,7 +212,7 @@ class AgendaBackend:
             model_path or "language_models/Qwen3-4B-Q6_K.gguf"
         )
         self.llm_model: Llama | None = None
-        # self._load_llm_model_async()  # Non-blocking
+        self._load_llm_model_async()  # Non-blocking
 
     # ------------------------------------------------------------------ CSV helpers
     @staticmethod
