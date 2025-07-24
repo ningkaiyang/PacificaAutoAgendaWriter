@@ -30,7 +30,6 @@ This application is currently at **Version 2.0 (Kivy Edition)**. It represents a
 *   **Video Demonstration:** A link to a video demonstration is planned to be added to the help tab in the future.
 *   **Help Tab Improvements:** Plans are underway to enhance the help tab with more detailed instructions, comprehensive troubleshooting tips, and additional resources.
 *   **Ignoring Certain Statements:** Implement logic to parse and ignore any text enclosed within square brackets `[]` before sending the content to the LLM.
-*   **Settings Menu: Prompt Selection:** Create a dedicated settings menu and utilize an appdata folder to allow for flexible modification of the LLM prompts within the backend. This should include buttons to edit the PASS 1 or PASS 2 prompts, which would open a text box for user modification. The prompts should still support f-string replacements using `{}`. The boxes should be pre-populated with the default prompts, and a "reset to default" button should also be available.
 *   **Settings Menu: Debug Mode:** Create a settings menu and utilize an appdata folder to allow for toggling a Debug Mode. When enabled, a terminal window should appear, displaying the internal thoughts generated during PASS 1 and PASS 2, along with input values, token speeds, and memory usage, to aid in troubleshooting and debugging across different operating systems.
 *   **Settings Menu: Uninstall App:** Implement a feature within the settings menu to cleanly remove all application files, including the downloaded model and any stored JSON settings.
 

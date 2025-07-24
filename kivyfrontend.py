@@ -1110,8 +1110,18 @@ class PacificaAgendaApp(App):
 
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
         
-        text_input = TextInput(text=initial_text, font_size=14)
-        scroll_view = ScrollView()
+        # Configure TextInput for scrolling within a ScrollView
+        text_input = TextInput(
+            text=initial_text,
+            font_size=22,  # Increased font size for readability
+            size_hint_y=None,  # Disable vertical size hint to allow custom height
+        )
+        # Bind the height of the TextInput to its minimum_height.
+        # This makes the TextInput grow vertically as more text is added.
+        text_input.bind(minimum_height=text_input.setter('height'))
+
+        # ScrollView to contain the resizable TextInput
+        scroll_view = ScrollView(scroll_wheel_distance=100)  # Increased scroll speed
         scroll_view.add_widget(text_input)
         content.add_widget(scroll_view)
 
