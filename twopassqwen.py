@@ -118,7 +118,7 @@ You have recieved a set of summarized items. You are to categorize them and prop
 Follow these rules strictly:
 1.  Format: The output must be raw text only. Do not use any markdown like '##' or '**'.
 2.  Date Header: The report must start with the FULL month name followed by the day number, e.g. "January 1:".  NEVER use numeric-month abbreviations such as "1-Jan".  If there are meeting-level notes, place them in parentheses immediately after the date.
-3.  Sections: The report MUST CONTAIN each of these headers, and in the following order:
+3.  Sections: The report MUST CONTAIN each of these headers ON THEIR OWN LINE, and in the following order:
         "Study Session:"
         "Closed Session:"
         "Special Presentations:"
@@ -850,22 +850,23 @@ Rules for summarization:
 - Summarize each agenda item in ONE concise single clause as short and clean as possible that clearly signals what the item is. You can omit most parenthesized text from original inputs. Attempt to split or summarize further if it reads like a run-on sentence.
 - You should first figure out which category each item belongs in and prepend it to the item: "Study Session:" or "Closed Session:" or "Special Presentations:" or "Consent:" or "Consideration or Public Hearing:". IMPORTANT: ALL considerations OR public hearings go under "Consideration or Public Hearing:".
 - You MUST omit unnecessary internal workflow words such as "moved from [dates]", and "per [person]". DO NOT say "moved from 1/1 to 12/31 per Y.Carter" or "per K.Woodhouse" or such.
-- If an item INCLUDES THE TEXT "placeholder" SPECIFICALLY (NOT "TBD", etc), DELETE the entire placeholder and append "(placeholder)" to the end with no other unnecessary placeholder details.
+- If an item INCLUDES the TEXT "placeholder" SPECIFICALLY (NOT the text "TBD", etc), DELETE the entire placeholder and append "(placeholder)" to the end with no other unnecessary placeholder details.
 - If an item INCLUDES " ADD DESCRIPTION", DELETE it and append " - ADD DESCRIPTION" to the end, after any potential "(placeholder)".
 - Each summary title MUST use Title Case (capitalize all principal words), for example: "Approval of Minutes for 1/1/2025 Meeting".
-- If an agenda item includes a placeholder date/workflow date, DELETE it. For logistic dates that belong in the item, keep the date exactly as it appears; do not convert month names or add/remove leading zeros.
+- If an agenda item includes a workflow date, DELETE it. For logistic dates that belong in the item, keep the date exactly as it appears; do not convert month names or add/remove leading zeros.
 - You are also allowed to split long items into seperate items if they would do well as concise seperate items.
 
 Some good examples:
 <examples>
-Closed Session: TBD - ADD DESCRIPTION
 Study Session: Study Session on Revenue Generation - ADD DESCRIPTION
+Closed Session: TBD - ADD DESCRIPTION
 Special Presentations: City Staff New Hires (Semi-Annual Update)
 Consent: Annual POs/Agreements over $75K PWD-Wastewater
-Consideration or Public Hearing: Resolution to Establish Climate Action & Resilience Plan Implementation Committee per CAAP Task Force Charter
+Consent: Police Militarized Equipment Annual Update - ADD DESCRIPTION (placeholder)
 Consent: Sewer service charges for FY2025-26 (last year of approved 5-year schedule)
-Consideration or Public Hearing: Continued Consideration of Climate Action and Resilience Plan Adoption
 Consent: Approval of Minutes for 1/1/2024 City Council Meeting
+Consideration or Public Hearing: Resolution to Establish Climate Action & Resilience Plan Implementation Committee per CAAP Task Force Charter
+Consideration or Public Hearing: Continued Consideration of Climate Action and Resilience Plan Adoption
 </examples>
 
 Meeting Date: {date} - IMPORTANT! THIS IS THE ACTUAL MEETING DATE, KEEP TRACK OF IT CAREFULLY! Start off your summarization lines with this meeting date, parsed neatly as <Month Day> like "Meeting Date: January 1" or "Meeting Date: December 31". Parse carefully, i.e. "8-Sep" = "Meeting Date: September 8"!
@@ -881,9 +882,9 @@ Provide ONLY the proper meeting date format and then the summarized lines, each 
                 print("\n--- PASS 1: SUMMARIZATION ---")
                 summarization_stream = self.llm_model.create_chat_completion(
                     messages=[{"role": "user", "content": summarization_prompt}],
-                    max_tokens=4000,
+                    max_tokens=10000,
                     temperature=0,
-                    top_p=0.01,
+                    top_p=0.00,
                     top_k=20,
                     stream=True,
                 )
@@ -913,9 +914,9 @@ Provide ONLY the proper meeting date format and then the summarized lines, each 
                 print("\n--- PASS 2: FORMATTING ---")
                 format_stream = self.llm_model.create_chat_completion(
                     messages=[{"role": "user", "content": format_prompt}],
-                    max_tokens=4000,
+                    max_tokens=10000,
                     temperature=0,
-                    top_p=0.01,
+                    top_p=0.00,
                     top_k=20,
                     stream=True,
                 )
