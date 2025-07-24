@@ -30,6 +30,7 @@ from kivy import platform  # type: ignore
 from kivy.app import App
 from kivy.clock import mainthread
 from kivy.core.window import Window
+from kivy.graphics import Color, Rectangle, RoundedRectangle
 from kivy.properties import BooleanProperty, ListProperty, ObjectProperty, StringProperty
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
@@ -137,29 +138,173 @@ class DropLabel(Label):
 
 
 # --------------------------------------------------------------------------------------
-# Item view for the RecycleView
+# Simple item widget for the list
+# --------------------------------------------------------------------------------------
+class AgendaItem(BoxLayout):
+    def __init__(self, text, index, app, **kwargs):
+        super().__init__(orientation="horizontal", spacing=10, size_hint_y=None, height=50, **kwargs)
+        
+        self.app = app
+        self.index = index
+        self.selected = True  # start selected by default
+        
+        # Create a checkbox to show selection state
+        self.checkbox = CheckBox(active=True, size_hint_x=None, width=40)
+        self.checkbox.bind(active=self.on_checkbox_toggle)
+        self.add_widget(self.checkbox)
+        
+        # Create label for the text content
+        self.label = Label(
+            text=text,
+            markup=True,
+            text_size=(None, None),
+            halign="left",
+            valign="middle",
+            color=[0, 0, 0, 1],
+            size_hint_x=1
+        )
+        self.label.bind(size=self._update_text_size)
+        self.add_widget(self.label)
+        
+        # Set initial background after widget is fully constructed
+        # Use Clock.schedule_once to delay this until the next frame
+        from kivy.clock import Clock
+        Clock.schedule_once(lambda dt: self.update_background(), 0)
+    
+    def _update_text_size(self, *args):
+        # Update text_size when label size changes for proper text wrapping
+        self.label.text_size = (self.label.width, None)
+    
+    def on_checkbox_toggle(self, checkbox, value):
+        """Handle checkbox toggle"""
+        self.selected = value
+        self.update_background()
+        
+        # Notify the app
+        if value:
+            self.app.mark_selected(self.index)
+        else:
+            self.app.mark_deselected(self.index)
+    
+    def update_background(self):
+        """Update background color based on selection"""
+        if not self.canvas:  # Check if canvas exists
+            return
+            
+        self.canvas.before.clear()
+        with self.canvas.before:
+            if self.selected:
+                Color(*StyledButton.hex2rgba(PACIFICA_BLUE, 0.3))  # light blue background
+            else:
+                Color(*StyledButton.hex2rgba("#FFFFFF", 1.0))  # white background
+            Rectangle(pos=self.pos, size=self.size)
+    
+    def on_size(self, *args):
+        """Update background rectangle when size changes"""
+        self.update_background()
+    
+    def on_pos(self, *args):
+        """Update background rectangle when position changes"""
+        self.update_background()
+
+
+# --------------------------------------------------------------------------------------
+# Item view for the RecycleView (keeping for potential future use)
 # --------------------------------------------------------------------------------------
 class SelectableItem(RecycleDataViewBehavior, BoxLayout):
     index = None
     selected = BooleanProperty(False)
     selectable = BooleanProperty(True)
 
+    def __init__(self, **kwargs):
+        super().__init__(orientation="horizontal", spacing=10, size_hint_y=None, height=50, **kwargs)
+        
+        # Create a checkbox to show selection state
+        self.checkbox = CheckBox(active=False, size_hint_x=None, width=40)
+        self.checkbox.bind(active=self.on_checkbox_toggle)
+        self.add_widget(self.checkbox)
+        
+        # Create label for the text content
+        self.label = Label(
+            text="",
+            markup=True,
+            text_size=(None, None),
+            halign="left",
+            valign="middle",
+            color=[0, 0, 0, 1],
+            size_hint_x=1
+        )
+        self.label.bind(size=self._update_text_size)
+        self.add_widget(self.label)
+        
+        # Bind the selected property to update checkbox
+        self.bind(selected=self.on_selected_change)
+    
+    def _update_text_size(self, *args):
+        # Update text_size when label size changes for proper text wrapping
+        self.label.text_size = (self.label.width, None)
+
     def refresh_view_attrs(self, rv, index, data):
+        """Called when the view is recycled"""
         self.index = index
+        
+        # Update the content from data
+        self.label.text = data.get("text", "")
+        self.label.markup = data.get("markup", True)
+        self.height = data.get("height", 50)
+        
+        # Update selection state from data
+        self.selected = data.get("selected", False)
+        
         return super().refresh_view_attrs(rv, index, data)
+    
+    def on_selected_change(self, instance, value):
+        """Update checkbox when selected property changes"""
+        self.checkbox.active = value
+        
+        # Update background color based on selection
+        if hasattr(self, 'canvas'):
+            self.canvas.before.clear()
+            with self.canvas.before:
+                if value:
+                    Color(*StyledButton.hex2rgba(PACIFICA_BLUE, 0.3))  # light blue background
+                else:
+                    Color(*StyledButton.hex2rgba("#FFFFFF", 1.0))  # white background
+                Rectangle(pos=self.pos, size=self.size)
+    
+    def on_checkbox_toggle(self, checkbox, value):
+        """Handle checkbox toggle"""
+        self.selected = value
+        
+        # Update the RecycleView data
+        # Find the RecycleView by walking up the parent tree
+        rv = self.parent
+        while rv and not hasattr(rv, 'data'):
+            rv = rv.parent
+            
+        if rv and hasattr(rv, 'data') and self.index is not None and self.index < len(rv.data):
+            rv.data[self.index]["selected"] = value
+            
+            # Notify the app
+            if hasattr(rv, 'app'):
+                if value:
+                    rv.app.mark_selected(self.index)
+                else:
+                    rv.app.mark_deselected(self.index)
 
     def on_touch_down(self, touch):
         if super().on_touch_down(touch):
             return True
         if self.collide_point(*touch.pos) and self.selectable:
-            self.selected = not self.selected
-            rv = self.parent
-            if self.selected:
-                rv.app.mark_selected(self.index)
-            else:
-                rv.app.mark_deselected(self.index)
+            # Toggle selection when clicked (but not on checkbox)
+            if not self.checkbox.collide_point(*touch.pos):
+                self.checkbox.active = not self.checkbox.active
             return True
         return False
+    
+    def on_size(self, *args):
+        """Update background rectangle when size changes"""
+        self.on_selected_change(self, self.selected)
 
 
 # --------------------------------------------------------------------------------------
@@ -254,12 +399,9 @@ class PacificaAgendaApp(App):
             spacing=10,
         )
         with drop_area.canvas.before:
-            from kivy.graphics import Color, RoundedRectangle
             Color(*StyledButton.hex2rgba("#FFFFFF", 1)) # Add white background
             RoundedRectangle(pos=drop_area.pos, size=drop_area.size, radius=[10])
         with drop_area.canvas.before:
-            from kivy.graphics import Color, RoundedRectangle
-
             Color(*StyledButton.hex2rgba(PACIFICA_BLUE, 0.6))
             self._drop_rect = RoundedRectangle(pos=drop_area.pos, size=drop_area.size, radius=[10])
         drop_area.bind(pos=self._update_drop_rect, size=self._update_drop_rect)
@@ -346,11 +488,12 @@ class PacificaAgendaApp(App):
 
         layout.add_widget(topbar)
 
-        # RecycleView
-        self.rv = RecycleView(size_hint=(1, 1))
-        self.rv.viewclass = "SelectableItem"
-        self.rv.app = self  # small hack so child views can call back
-        layout.add_widget(self.rv)
+        # Create a scrollable list using ScrollView and BoxLayout
+        scroll = ScrollView(size_hint=(1, 1))
+        self.items_container = BoxLayout(orientation='vertical', size_hint_y=None, spacing=2)
+        self.items_container.bind(minimum_height=self.items_container.setter('height'))
+        scroll.add_widget(self.items_container)
+        layout.add_widget(scroll)
 
         sel_bar = BoxLayout(size_hint_y=None, height=40, spacing=10)
         sel_all = StyledButton(text="Select All", width=120, height=40)
@@ -365,34 +508,47 @@ class PacificaAgendaApp(App):
 
     def _populate_review_list(self):
         self.selected_indices.clear()
-        data = []
+        
+        # Clear existing items
+        self.items_container.clear_widgets()
+        
+        # Add each item as a widget
         for idx, row in enumerate(self.filtered_items):
             date = str(row.get("MEETING DATE", "")).strip()
-            sec = str(row.get("AGENDA SECTION", "")).strip()
-            item = str(row.get("AGENDA ITEM", "")).strip()
-            notes = str(row.get("NOTES", "")).strip() if pd.notna(row.get("NOTES")) else ""
-            display = f"[b]{date}[/b] | {sec} | {item} {('('+notes+')') if notes else ''}"
-            data.append(
-                {
-                    "text": display,
-                    "markup": True,
-                    "size_hint_y": None,
-                    "height": 30,
-                    "selected": True,
-                }
-            )
+            sec = str(row.get("AGENDA SECTION", "")).replace("\\n", " ").replace("•", "-").strip()
+            item = str(row.get("AGENDA ITEM", "")).replace("\\n", " ").replace("•", "-").strip()
+            notes = ""
+            if pd.notna(row.get("NOTES")):
+                n = str(row["NOTES"]).replace("\\n", " ").replace("•", "-").strip()
+                if n and n.lower() != "nan":
+                    notes = n
+            
+            # Create display text without markup formatting issues
+            display = f"{date} | {sec} | {item}"
+            if notes:
+                display += f" ({notes})"
+            
+            # Create and add the item widget
+            item_widget = AgendaItem(display, idx, self)
+            self.items_container.add_widget(item_widget)
             self.selected_indices.add(idx)
-        self.rv.data = data
+        
         self.review_label.text = f"Items Selected: {len(self.selected_indices)}"
 
     def _select_all_items(self, select=True):
-        for d in self.rv.data:
-            d["selected"] = select
+        # Update all item widgets
+        for child in self.items_container.children:
+            if isinstance(child, AgendaItem):
+                child.checkbox.active = select
+                child.selected = select
+                child.update_background()
+        
+        # Update selection tracking
         if select:
-            self.selected_indices = set(range(len(self.rv.data)))
+            self.selected_indices = set(range(len(self.items_container.children)))
         else:
             self.selected_indices.clear()
-        self.rv.refresh_from_data()
+        
         self.review_label.text = f"Items Selected: {len(self.selected_indices)}"
 
     # called from child item views
