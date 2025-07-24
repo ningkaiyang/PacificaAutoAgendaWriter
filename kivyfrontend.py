@@ -318,7 +318,8 @@ class UploadZone(BoxLayout):
 # --------------------------------------------------------------------------------------
 class AgendaItem(BoxLayout):
     def __init__(self, text, index, app, **kwargs):
-        super().__init__(orientation="horizontal", spacing=10, size_hint_y=None, **kwargs)  # remove fixed height
+        # Increased padding (horizontal 20px, vertical 15px) and spacing (15px)
+        super().__init__(orientation="horizontal", padding=(20, 15), spacing=15, size_hint_y=None, **kwargs)
         
         self.app = app
         self.index = index
@@ -339,7 +340,7 @@ class AgendaItem(BoxLayout):
             color=[0, 0, 0, 1],
             size_hint_x=1,
             size_hint_y=None,  # important: don't let label stretch vertically
-            font_size=24  # smaller font size for better fitting
+            font_size=30  # smaller font size for better fitting
         )
         self.label.bind(texture_size=self._on_label_texture_size)  # bind to texture_size instead of size
         self.add_widget(self.label)
@@ -356,8 +357,8 @@ class AgendaItem(BoxLayout):
     def _update_text_size(self, *args):
         """update text_size when label size changes for proper text wrapping"""
         if self.label.parent:  # make sure label is added to parent
-            # set text width to available space minus checkbox width and spacing
-            available_width = self.width - self.checkbox.width - 20  # 20 for spacing and padding
+            # calculate available width considering explicit padding and spacing
+            available_width = self.width - (self.padding[0] + self.padding[2]) - self.checkbox.width - self.spacing
             if available_width > 0:
                 self.label.text_size = (available_width, None)
     
@@ -365,8 +366,8 @@ class AgendaItem(BoxLayout):
         """called when label's rendered text size changes"""
         # update the label height to match the text height
         self.label.height = texture_size[1]
-        # update the container height to fit the label plus some padding
-        self.height = max(50, texture_size[1] + 20)  # minimum 50px height, 20px padding
+        # update the container height to fit the label plus vertical padding
+        self.height = max(50, texture_size[1] + (self.padding[1] + self.padding[3]))
     
     def on_size(self, *args):
         """update background and text size when widget size changes"""
@@ -724,7 +725,7 @@ class PacificaAgendaApp(App):
         layout.add_widget(topbar)
 
         # Create a scrollable list using ScrollView and BoxLayout
-        scroll = ScrollView(size_hint=(1, 1))
+        scroll = ScrollView(size_hint=(1, 1), scroll_distance=100, scroll_wheel_distance=100) # Increased scroll speed
         self.items_container = BoxLayout(orientation='vertical', size_hint_y=None, spacing=2)
         self.items_container.bind(minimum_height=self.items_container.setter('height'))
         scroll.add_widget(self.items_container)
