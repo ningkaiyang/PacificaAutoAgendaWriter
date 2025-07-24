@@ -119,22 +119,95 @@ class ToggleSwitch(BoxLayout):
         self.add_widget(cb)
 
 
-class DropLabel(Label):
-    """Label that changes appearance on drag enter."""
+class UploadZone(BoxLayout):
+    """Unified drag-and-drop and click upload zone."""
 
-    def __init__(self, **kw):
+    def __init__(self, app_instance, **kw):
         super().__init__(
-            text="Drag CSV Here or Click Browse",
-            font_size=22,
-            halign="center",
-            valign="middle",
-            color=[0, 0, 0, 1],
+            orientation="vertical",
+            size_hint=(1, 0.7),
+            padding=40,
+            spacing=20,
             **kw,
         )
-        self.bind(size=self._update_text_size)
+        self.app_instance = app_instance
+        self.is_hovered = False
+        
+        # create the visual background
+        with self.canvas.before:
+            Color(*StyledButton.hex2rgba("#FFFFFF", 1))  # white base background
+            self._bg_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15])
+            Color(*StyledButton.hex2rgba(PACIFICA_BLUE, 0.4))  # blue overlay
+            self._overlay_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15])
+        
+        self.bind(pos=self._update_canvas, size=self._update_canvas)
+        
+        # main upload text/button
+        self.upload_label = Label(
+            text="[size=40][b]Click to Upload CSV[/b][/size]\n[size=24]or drag and drop your file here[/size]",
+            markup=True,
+            halign="center",
+            valign="middle",
+            color=[1, 1, 1, 1],  # white text for visibility on blue background
+        )
+        self.upload_label.bind(size=self._update_text_size)
+        self.add_widget(self.upload_label)
+        
+        # add some visual spacing
+        self.add_widget(Widget(size_hint_y=0.2))
+        
+        # file format hint
+        hint_label = Label(
+            text="[size=18]Supported format: CSV files only[/size]",
+            markup=True,
+            halign="center",
+            valign="middle",
+            color=[1, 1, 1, 0.8],  # slightly transparent white
+            size_hint_y=None,
+            height=30,
+        )
+        hint_label.bind(size=lambda inst, *_: inst.setter("text_size")(inst, (inst.width, None)))
+        self.add_widget(hint_label)
+
+    def _update_canvas(self, *_):
+        """update canvas rectangles when position/size changes"""
+        self._bg_rect.pos = self.pos
+        self._bg_rect.size = self.size
+        self._overlay_rect.pos = self.pos
+        self._overlay_rect.size = self.size
 
     def _update_text_size(self, *_):
-        self.text_size = (self.width * 0.9, None)
+        """update text wrapping"""
+        self.upload_label.text_size = (self.width * 0.9, None)
+
+    def on_touch_down(self, touch):
+        """handle clicks anywhere in the upload zone"""
+        if self.collide_point(*touch.pos):
+            # add visual feedback by temporarily darkening the zone
+            self._set_hover_state(True)
+            # trigger file browser
+            self.app_instance._open_file_browser("csv")
+            return True
+        return super().on_touch_down(touch)
+    
+    def on_touch_up(self, touch):
+        """reset visual state on touch release"""
+        if self.collide_point(*touch.pos):
+            self._set_hover_state(False)
+        return super().on_touch_up(touch)
+    
+    def _set_hover_state(self, hovered):
+        """update visual appearance for hover/press state"""
+        self.is_hovered = hovered
+        self.canvas.before.clear()
+        with self.canvas.before:
+            Color(*StyledButton.hex2rgba("#FFFFFF", 1))  # white base background
+            self._bg_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15])
+            if hovered:
+                Color(*StyledButton.hex2rgba(PACIFICA_BLUE, 0.7))  # darker blue when pressed
+            else:
+                Color(*StyledButton.hex2rgba(PACIFICA_BLUE, 0.4))  # normal blue
+            self._overlay_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15])
 
 
 # --------------------------------------------------------------------------------------
@@ -417,31 +490,9 @@ class PacificaAgendaApp(App):
         )
         root.add_widget(header)
 
-        # Drop area
-        drop_area = BoxLayout(
-            orientation="vertical",
-            size_hint=(1, 0.6),
-            padding=20,
-            spacing=10,
-        )
-        with drop_area.canvas.before:
-            Color(*StyledButton.hex2rgba("#FFFFFF", 1)) # Add white background
-            RoundedRectangle(pos=drop_area.pos, size=drop_area.size, radius=[10])
-        with drop_area.canvas.before:
-            Color(*StyledButton.hex2rgba(PACIFICA_BLUE, 0.6))
-            self._drop_rect = RoundedRectangle(pos=drop_area.pos, size=drop_area.size, radius=[10])
-        drop_area.bind(pos=self._update_drop_rect, size=self._update_drop_rect)
-        lbl = DropLabel()
-        drop_area.add_widget(lbl)
-        root.add_widget(drop_area)
-
-        browse_box = BoxLayout(size_hint_y=None, height=50, padding=(0, 10, 0, 0))
-        browse_btn = StyledButton(text="Click to Upload CSV", size_hint=(None, None), width=200, height=50)
-        browse_btn.bind(on_release=lambda *_: self._open_file_browser("csv"))
-        browse_box.add_widget(Widget())
-        browse_box.add_widget(browse_btn)
-        browse_box.add_widget(Widget())
-        root.add_widget(browse_box)
+        # unified upload zone (replaces both drop area and browse button)
+        upload_zone = UploadZone(self)
+        root.add_widget(upload_zone)
 
         nav_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=40, spacing=10)
         nav_bar.add_widget(Widget())
@@ -461,11 +512,9 @@ class PacificaAgendaApp(App):
         nav_bar.add_widget(Widget())
         root.add_widget(nav_bar)
 
-        root.add_widget(Label(size_hint_y=0.2))  # spacer
+        root.add_widget(Label(size_hint_y=0.1))  # smaller spacer
         self.screen_manager.add_widget(scr)
 
-    def _update_drop_rect(self, instance, *_):
-        self._drop_rect.pos, self._drop_rect.size = instance.pos, instance.size
 
     def _open_file_browser(self, filetype: str):
         chooser = FileChooserListView(filters=["*.csv"] if filetype == "csv" else None, path=os.getcwd())
