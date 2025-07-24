@@ -751,7 +751,11 @@ class PacificaAgendaApp(App):
 
             date = str(row.get("MEETING DATE", "")).strip()
             sec = str(row.get("AGENDA SECTION", "")).replace("\n", " ").replace("•", "-").strip()
+            if sec == "nan":
+                sec = "placeholder"
             item = str(row.get("AGENDA ITEM", "")).replace("\n", " ").replace("•", "-").strip()
+            if item == "nan":
+                item = "unnamed item"
             notes = ""
             if pd.notna(row.get("NOTES")):
                 n = str(row["NOTES"]).replace("\n", " ").replace("•", "-").strip()
@@ -1081,9 +1085,21 @@ class PacificaAgendaApp(App):
 
         # scrollable area for the main content
         scroll = ScrollView(size_hint=(1, 1))
-        content = BoxLayout(orientation="vertical", spacing=15, size_hint_y=None, padding=(20, 20))
+        # New layout to center content vertically within the scrollview
+        aligner_layout = BoxLayout(orientation="vertical", size_hint_y=1, padding=(0, 20)) # Added vertical padding for overall look
+        
+        # Spacer above the content
+        aligner_layout.add_widget(Widget())
+
+        content = BoxLayout(orientation="vertical", spacing=15, size_hint_y=None, padding=(20, 0)) # Removed vertical padding here, using aligner_layout instead
         content.bind(minimum_height=content.setter('height'))
-        scroll.add_widget(content)
+        
+        aligner_layout.add_widget(content)
+        
+        # Spacer below the content
+        aligner_layout.add_widget(Widget())
+
+        scroll.add_widget(aligner_layout)
         root.add_widget(scroll)
 
         # helper to add a centered label with wrapping

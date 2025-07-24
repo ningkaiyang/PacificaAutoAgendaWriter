@@ -331,7 +331,11 @@ class AgendaBackend:
                 items_text = ""
                 for it in items:
                     sec = str(it.get("AGENDA SECTION", "N/A")).replace("\n", " ").replace("•", "-").strip()
+                    if sec == "nan":
+                        sec = "placeholder"
                     title = str(it.get("AGENDA ITEM", "N/A")).replace("\n", " ").replace("•", "-").strip()
+                    if title == "nan":
+                        title = "unnamed item"
                     notes_val = it.get("NOTES")
                     entry = f"- Item: {title}, Section: \"{sec}\""
                     if pd.notna(notes_val):
