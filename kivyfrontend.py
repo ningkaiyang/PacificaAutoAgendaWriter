@@ -10,6 +10,7 @@ only uses vanilla Kivy to avoid extra requirements.
 This GUI intentionally mirrors the workflow of the existing
 CustomTkinter GUI while adding:
  • Native drag-and-drop
+ • Native OS file dialogs (via osascript on macOS, with fallback to Kivy)
  • Settings menu (model, prompt, debug)
  • Soft-cancel of generation on Back
  • Optional on-screen debug console
@@ -19,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import threading
 import traceback
@@ -84,6 +86,88 @@ def save_conf(conf: dict):
 
 
 CONF = load_conf()
+
+# --------------------------------------------------------------------------------------
+# Native file dialog functions
+# --------------------------------------------------------------------------------------
+def native_open_file_dialog(title="Select File", file_types=None, multiple=False):
+    """open file dialog using native OS dialogs (macOS via osascript)"""
+    if platform == "macosx":
+        try:
+            # build applescript command that returns POSIX path directly
+            script = f'''
+            set theFile to choose file with prompt "{title}"
+            return POSIX path of theFile
+            '''
+            
+            # add file type filtering if needed
+            if file_types:
+                # convert file types to applescript format
+                if any("*.csv" in ft[1] for ft in file_types):
+                    script = f'''
+                    set theFile to choose file with prompt "{title}" of type {{"csv"}}
+                    return POSIX path of theFile
+                    '''
+                elif any("*.gguf" in ft[1] for ft in file_types):
+                    script = f'''
+                    set theFile to choose file with prompt "{title}" of type {{"gguf"}}
+                    return POSIX path of theFile
+                    '''
+                elif any("*.bin" in ft[1] for ft in file_types):
+                    script = f'''
+                    set theFile to choose file with prompt "{title}" of type {{"bin"}}
+                    return POSIX path of theFile
+                    '''
+            
+            # run osascript
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            
+            if result.returncode == 0 and result.stdout.strip():
+                posix_path = result.stdout.strip()
+                print(f"native open dialog returned: {posix_path}")  # debug
+                return [posix_path]
+                
+        except Exception as e:
+            print(f"native file dialog error: {e}")
+    
+    return None  # fallback needed
+
+
+def native_save_file_dialog(title="Save File", filename="", file_types=None):
+    """save file dialog using native OS dialogs (macOS via osascript)"""
+    if platform == "macosx":
+        try:
+            # build applescript for save dialog that returns POSIX path directly
+            script = f'''
+            set theFile to choose file name with prompt "{title}"'''
+            if filename:
+                script += f' default name "{filename}"'
+            script += '''
+            return POSIX path of theFile
+            '''
+            
+            # run osascript
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            
+            if result.returncode == 0 and result.stdout.strip():
+                posix_path = result.stdout.strip()
+                print(f"native save dialog returned: {posix_path}")  # debug
+                return posix_path
+                
+        except Exception as e:
+            print(f"native save dialog error: {e}")
+    
+    return None  # fallback needed
 
 # --------------------------------------------------------------------------------------
 # Helper widgets
@@ -517,6 +601,20 @@ class PacificaAgendaApp(App):
 
 
     def _open_file_browser(self, filetype: str):
+        # try native dialog first
+        if filetype == "csv":
+            filters = [("CSV files", "*.csv"), ("All files", "*.*")]
+            title = "Select CSV File"
+        else:
+            filters = [("All files", "*.*")]
+            title = "Select File"
+        
+        selection = native_open_file_dialog(title=title, file_types=filters)
+        if selection:
+            self._process_csv(selection[0])
+            return
+        
+        # fallback to kivy file chooser
         chooser = FileChooserListView(filters=["*.csv"] if filetype == "csv" else None, path=os.getcwd())
         popup = Popup(title="Select CSV", content=chooser, size_hint=(0.9, 0.9))
 
@@ -740,6 +838,20 @@ class PacificaAgendaApp(App):
 
     # pickers
     def _choose_model(self):
+        # try native dialog first
+        filters = [("GGUF Model files", "*.gguf"), ("Binary Model files", "*.bin"), ("All files", "*.*")]
+        selection = native_open_file_dialog(title="Select Model File", file_types=filters)
+        
+        if selection:
+            CONF["model_path"] = selection[0]
+            self.model_path_lbl.text = selection[0]
+            save_conf(CONF)
+            # reload model async
+            self.backend.model_path = selection[0]
+            self.backend._load_llm_model_async()
+            return
+        
+        # fallback to kivy file chooser
         chooser = FileChooserListView(path=os.getcwd(), filters=["*.gguf", "*.bin"])
         popup = Popup(title="Select Model", content=chooser, size_hint=(0.9, 0.9))
 
@@ -757,6 +869,25 @@ class PacificaAgendaApp(App):
         popup.open()
 
     def _choose_prompt(self):
+        # try native dialog first
+        filters = [
+            ("Text files", "*.txt"),
+            ("Prompt files", "*.prompt"),
+            ("Markdown files", "*.md"),
+            ("JSON files", "*.json"),
+            ("Python files", "*.py"),
+            ("All files", "*.*")
+        ]
+        selection = native_open_file_dialog(title="Select Prompt File", file_types=filters)
+        
+        if selection:
+            CONF["prompt_path"] = selection[0]
+            self.prompt_path_lbl.text = selection[0]
+            save_conf(CONF)
+            self._load_prompt_from_file(selection[0])
+            return
+        
+        # fallback to kivy file chooser
         chooser = FileChooserListView(path=os.getcwd(), filters=["*.txt", "*.prompt", "*.md", "*.json", "*.py", "*"])
         popup = Popup(title="Select Prompt File", content=chooser, size_hint=(0.9, 0.9))
 
@@ -877,25 +1008,86 @@ class PacificaAgendaApp(App):
         self._save_docx(doc, fname)
 
     def _save_docx(self, doc, suggested_name: str):
-        from kivy.core.window import Window
-        fc = FileChooserListView(path=os.getcwd(), filters=["*.docx"])
-        popup = Popup(title="Save Report", content=fc, size_hint=(0.9, 0.9))
-
-        def _on_submit(_, sel):
-            if sel:
-                path = sel[0]
-                if not path.lower().endswith(".docx"):
-                    path += ".docx"
-            else:
-                path = os.path.join(fc.path, suggested_name)
+        # try native save dialog first
+        filters = [("Word Documents", "*.docx"), ("All files", "*.*")]
+        save_path = native_save_file_dialog(
+            title="Save Report",
+            filename=suggested_name,
+            file_types=filters
+        )
+        
+        if save_path:
+            # ensure .docx extension
+            if not save_path.lower().endswith(".docx"):
+                save_path += ".docx"
+            
             try:
-                doc.save(path)
-                popup.dismiss()
-                self._show_info(f"Saved to {path}")
+                doc.save(save_path)
+                self._show_info(f"saved to {save_path}")
+                return
             except Exception as exc:
-                self._show_error("Save Error", str(exc))
-
-        fc.bind(on_submit=_on_submit)
+                self._show_error("save error", str(exc))
+                return
+        
+        # fallback to kivy file chooser with proper save functionality
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        
+        # file chooser
+        fc = FileChooserListView(path=os.getcwd(), filters=["*.docx"])
+        content.add_widget(fc)
+        
+        # filename input
+        filename_input = TextInput(
+            text=suggested_name,
+            size_hint_y=None,
+            height=40,
+            multiline=False,
+            hint_text="Enter filename..."
+        )
+        content.add_widget(filename_input)
+        
+        # buttons
+        btn_layout = BoxLayout(size_hint_y=None, height=40, spacing=10)
+        cancel_btn = StyledButton(text="Cancel", size_hint_x=0.5)
+        save_btn = StyledButton(text="Save", size_hint_x=0.5)
+        btn_layout.add_widget(cancel_btn)
+        btn_layout.add_widget(save_btn)
+        content.add_widget(btn_layout)
+        
+        popup = Popup(title="Save Report", content=content, size_hint=(0.9, 0.9))
+        
+        def _on_save(*args):
+            # get filename from input
+            filename = filename_input.text.strip()
+            if not filename:
+                filename = suggested_name
+            
+            # ensure .docx extension
+            if not filename.lower().endswith(".docx"):
+                filename += ".docx"
+            
+            # construct full path
+            save_path = os.path.join(fc.path, filename)
+            
+            try:
+                doc.save(save_path)
+                popup.dismiss()
+                self._show_info(f"saved to {save_path}")
+            except Exception as exc:
+                self._show_error("save error", str(exc))
+        
+        def _on_cancel(*args):
+            popup.dismiss()
+        
+        # update path when folder selection changes
+        def _on_selection(instance, selection):
+            if selection and os.path.isdir(selection[0]):
+                fc.path = selection[0]
+        
+        save_btn.bind(on_release=_on_save)
+        cancel_btn.bind(on_release=_on_cancel)
+        fc.bind(selection=_on_selection)
+        
         popup.open()
 
     # ---------------------------------------------------------------- Alerts
