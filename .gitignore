@@ -1,3 +1,4 @@
 language_models/gemma-3n-E2B-it-Q8_0.gguf
 .venv
 language_models/Qwen3-4B-Q6_K.gguf
+.DS_Store
