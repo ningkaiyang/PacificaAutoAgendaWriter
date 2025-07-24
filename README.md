@@ -33,7 +33,9 @@ This application is currently in development (version 1.0) and serves as a power
 *   **Parsing ALL rows:** Parse and display ALL rows in the checkbox menu, and only check the ones marked Y, to allow for overall viewing of spreadsheet within app. Make checkbox menu more condensed and optimized quicker to load because it lags right now.
 *   **Ignoring Certain Statements:** Parse out and ignore everything denoted by brackets [] in what is sent to the LLM.
 *   **Back Button Stoppage:** Back button from generation screen cancels the LLM generation running in the background.
-*   **Model Selection:** Allow for flexible model selection from a specific folder/directory.
+*   **Settings Menu: Model Selection:** Create a settings menu and allow for flexible model selection from a specific folder/directory.
+*   **Settings Menu: Prompt Selection:** Create a settings menu and allow for flexible prompt modification in the back-end.
+*   **Settings Menu: Debug Mode:** Create a settings menu and allow for toggling a Debug Mode, where when enabled a terminal appears where the PASS 1 and PASS 2 thoughts are outputted, alongside input values and token speeds and memory, to see and help debug on any OS.
 *   **Drag and Drop:** Fix drag and drop for .csv input.
 
 ## Technical Stack
