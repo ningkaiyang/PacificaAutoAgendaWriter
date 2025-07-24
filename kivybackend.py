@@ -230,10 +230,13 @@ class AgendaBackend:
     def process_csv(self, filepath: str) -> tuple[pd.DataFrame, List[pd.Series]]:
         """Read CSV, validate headers, filter rows → return (df, all_items)."""
         try:
-            df = pd.read_csv(filepath)
+            # Use the 'python' engine for more robust parsing of potentially
+            # irregular CSV files. It can handle rows with differing numbers
+            # of columns, which is common in this project's source files.
+            df = pd.read_csv(filepath, engine="python")
         except Exception as e:
             # Catch file read errors (e.g., file not found, permission error)
-            # and pandas parsing errors.
+            # and other pandas parsing errors.
             raise ValueError(f"Failed to read or parse CSV file: {e}")
 
         self._validate_headers(df)  # Will raise ValueError if invalid
