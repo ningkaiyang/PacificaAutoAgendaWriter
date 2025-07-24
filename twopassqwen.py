@@ -9,8 +9,6 @@ import pandas as pd
 from llama_cpp import Llama
 from docx import Document
 from docx.shared import Pt, Inches
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from PIL import Image
 import os
@@ -20,7 +18,7 @@ import traceback
 import sys
 import time
 import contextlib
-import resource  # i'll add this to track memory usage
+import resource
 
 # Configure CustomTkinter
 ctk.set_appearance_mode("light")
@@ -849,13 +847,13 @@ Chatbot icon created by juicy_fish - Flaticon."""
                 summarization_prompt = f"""You are an expert city clerk. Your task is to summarize each agenda item into ONE short clause.
 
 Rules for summarization:
-- Summarize each agenda item in ONE concise single clause as short and clean as possible that clearly signals what the item is. You can omit most parenthesized text from original inputs.
-- You should first figure out which category each item belongs in and prepend it to the item: "Study Session:" or "Closed Session:" or "Special Presentations:" or "Consent:" or "Consideration or Public Hearing:". IMPORTANT: ALL considerations OR public hearings go under "Consideration or Public Hearing:"
+- Summarize each agenda item in ONE concise single clause as short and clean as possible that clearly signals what the item is. You can omit most parenthesized text from original inputs. Attempt to split or summarize further if it reads like a run-on sentence.
+- You should first figure out which category each item belongs in and prepend it to the item: "Study Session:" or "Closed Session:" or "Special Presentations:" or "Consent:" or "Consideration or Public Hearing:". IMPORTANT: ALL considerations OR public hearings go under "Consideration or Public Hearing:".
 - You MUST omit unnecessary internal workflow words such as "moved from [dates]", and "per [person]". DO NOT say "moved from 1/1 to 12/31 per Y.Carter" or "per K.Woodhouse" or such.
-- If an item INCLUDES "placeholder", append "(placeholder)" with no other unnecessary placeholder details to the end
-- If an item INCLUDES " ADD DESCRIPTION", delete it and append " - ADD DESCRIPTION" to the end, after any potential "(placeholder)"
-- Each summary title must use Title Case (capitalize all principal words), for example: "Approval of Minutes for 1/1/2025 Meeting"
-- If an agenda item includes a non-placeholder date, keep the date exactly as it appears; do not convert month names or add/remove leading zeros. If it is part of a placeholder, delete it.
+- If an item INCLUDES THE TEXT "placeholder" SPECIFICALLY (NOT "TBD", etc), DELETE the entire placeholder and append "(placeholder)" to the end with no other unnecessary placeholder details.
+- If an item INCLUDES " ADD DESCRIPTION", DELETE it and append " - ADD DESCRIPTION" to the end, after any potential "(placeholder)".
+- Each summary title MUST use Title Case (capitalize all principal words), for example: "Approval of Minutes for 1/1/2025 Meeting".
+- If an agenda item includes a placeholder date/workflow date, DELETE it. For logistic dates that belong in the item, keep the date exactly as it appears; do not convert month names or add/remove leading zeros.
 - You are also allowed to split long items into seperate items if they would do well as concise seperate items.
 
 Some good examples:
