@@ -349,7 +349,7 @@ class AgendaSummaryGeneratorGUI(ctk.CTk):
             error_callback=self._err_cb,
         )
 
-    # ---------- backend callbacks ------------------------------------
+# ---------- backend callbacks ------------------------------------
     def _token_cb(self, txt: str):
         # ensure GUI thread
         self.after(0, lambda t=txt: (self.generation_textbox.insert("end", t),

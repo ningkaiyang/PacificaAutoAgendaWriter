@@ -325,6 +325,7 @@ class AgendaBackend:
                 # ------------ PASS 1 – single-line summaries
                 summarization_prompt = f"""You are an expert city clerk. Your task is to summarize each agenda item into ONE short clause.
 
+THINK STEP BY STEP, ONCE PER ITEM AND NO MORE. ONCE YOU ARE DONE WITH EVERY ITEM IMMEDIATELY EXIT YOUR THINKING BLOCK AND OUTPUT THE SUMMARIZED LINES.
 Rules for summarization:
 - Summarize each agenda item in ONE concise single clause as short and clean as possible that clearly signals what the item is. You can omit most parenthesized text from original inputs. Attempt to split or summarize further if it reads like a run-on sentence.
 - You should first figure out which category each item belongs in and prepend it to the item: "Study Session:" or "Closed Session:" or "Special Presentations:" or "Consent:" or "Consideration or Public Hearing:". IMPORTANT: ALL considerations OR public hearings go under "Consideration or Public Hearing:".
@@ -348,14 +349,13 @@ Consideration or Public Hearing: Resolution to Establish Climate Action & Resili
 Consideration or Public Hearing: Continued Consideration of Climate Action and Resilience Plan Adoption
 </examples>
 
-Meeting Date: {date} - IMPORTANT! THIS IS THE ACTUAL MEETING DATE, KEEP TRACK OF IT CAREFULLY! Start off your summarization lines with this meeting date, parsed neatly as <Month Day> like "Meeting Date: January 1" or "Meeting Date: December 31". Parse carefully, i.e. "8-Sep" = "Meeting Date: September 8"!
+Meeting Date: {md} - IMPORTANT! THIS IS THE ACTUAL MEETING DATE, KEEP TRACK OF IT CAREFULLY! Start off your summarization lines with this meeting date, parsed neatly as <Month Day> like "Meeting Date: January 1" or "Meeting Date: December 31". Parse carefully, i.e. "8-Sep" = "Meeting Date: September 8"!
 
 Agenda Items to Summarize - ONLY SUMMARIZE THESE, DO NOT ADD IN FROM EXAMPLES ACCIDENTALLY:
 <summarize_these>
 {items_text.strip()}
 </summarize_these>
 
-IMPORTANT: Do not explain your reasoning and think too much in circles; output the cleaned lines immediately.
 Provide ONLY the proper meeting date format and then the summarized lines, each CAREFULLY capitalized and prepended properly, one per line: /think"""
                 
                 print("\n--- PASS 1: SUMMARIZATION ---")
@@ -433,8 +433,6 @@ Provide ONLY the proper meeting date format and then the summarized lines, each 
             else:
                 traceback.print_exc()
 
-
-
     @staticmethod
     def _extract_clean_summary(raw: str) -> str:
         """Strip everything up to and incl. </think> if present."""
@@ -445,98 +443,129 @@ Provide ONLY the proper meeting date format and then the summarized lines, each 
 
     # ------------------------------------------------------------------ Word DOC creation
     @staticmethod
-    def create_word_document(content: str, meeting_dates: List[str]) -> Document:
-        from datetime import datetime
-
+    def create_word_document(content, meeting_dates):
+        """Create the Word document with proper formatting from raw text."""
         doc = Document()
-        # Basic style (Calibri 11)
-        style = doc.styles["Normal"]
-        style.font.name = "Calibri"
+        
+        # Set single spacing for the document
+        style = doc.styles['Normal']
+        style.font.name = 'Calibri'
         style.font.size = Pt(11)
+        style.paragraph_format.line_spacing = 1.0
         style.paragraph_format.space_before = Pt(0)
         style.paragraph_format.space_after = Pt(0)
-        style.paragraph_format.line_spacing = 1.0
 
-        doc.add_paragraph()
-        doc.add_paragraph(f"Updated {datetime.now():%B %d, %Y}")
+        # Add content
+        doc.add_paragraph()  # Blank line
+        
+        # Updated date
+        current_date = datetime.now().strftime("%B %d, %Y")
+        doc.add_paragraph(f"Updated {current_date}")
+        
+        # Calculate month range
+        if meeting_dates:
+            try:
+                # Date format is 'DD-Mon', e.g., '25-Aug'. Assume current year.
+                dates = [datetime.strptime(f"{d}-{datetime.now().year}", "%d-%b-%Y") for d in meeting_dates]
+                
+                # The list is chronologically sorted, so min is first, max is last.
+                min_date = dates[0]
+                max_date = dates[-1]
 
-        # Month range for title
-        month_range = AgendaBackend._month_range(meeting_dates)
+                # Handle year-end crossover (e.g., Dec to Jan)
+                if min_date.month > max_date.month:
+                    max_date = max_date.replace(year=min_date.year + 1)
+                
+                if min_date.strftime('%B %Y') == max_date.strftime('%B %Y'):
+                    month_range = min_date.strftime("%B %Y")
+                elif min_date.year != max_date.year:
+                    month_range = f"{min_date.strftime('%B %Y')} - {max_date.strftime('%B %Y')}"
+                else:
+                    # Same year, different months
+                    month_range = f"{min_date.strftime('%B')} - {max_date.strftime('%B, %Y')}"
+            except (ValueError, IndexError):
+                # Fallback if parsing fails or list is empty
+                month_range = datetime.now().strftime("%B %Y")
+        else:
+            month_range = datetime.now().strftime("%B %Y")
+            
+        # Title
         title = doc.add_paragraph()
+        title.paragraph_format.space_after = Pt(6)
         title_run = title.add_run(f"Major Council Agenda Items, Tentative for {month_range}")
         title_run.bold = True
         title_run.font.size = Pt(16)
-
-        note_p = doc.add_paragraph()
-        note_p.add_run(
-            "Note: This is a Tentative Agenda Listing. Dates of items are subject to change "
-            "up to the last minute for a variety of reasons. In addition, this listing does not "
-            "necessarily report all items, just ones that are noteworthy. The City Manager "
-            "typically reviews the tentative agenda items list in more detail with each "
-            "Councilmember during individual meetings."
-        ).italic = True
-
-        doc.add_paragraph("_" * 78)
-
-        is_first_day = True
-        for line in content.splitlines():
-            line = line.rstrip()
-            if not line:
+        
+        # Note
+        note_text = ("Note: This is a Tentative Agenda Listing. Dates of items are subject to change "
+                    "up to the last minute for a variety of reasons. In addition, this listing does not "
+                    "necessarily report all items, just ones that are noteworthy. The City Manager typically "
+                    "reviews the tentative agenda items list in more detail with each Councilmember during "
+                    "individual meetings.")
+        note = doc.add_paragraph()
+        note_run = note.add_run(note_text)
+        note_run.italic = True
+        
+        # Add horizontal line
+        doc.add_paragraph("_" * 78).paragraph_format.space_before = Pt(12)
+        
+        # Add LLM content by parsing it
+        is_first_date = True
+        for line in content.split('\n'):
+            stripped_line = line.strip()
+            if not stripped_line:
                 continue
-            # Date header (heuristic)
-            if not line.startswith(("- ", "Study Session:", "Closed Session:",
-                                     "Special Presentations:", "Consent:",
-                                     "Consideration or Public Hearing:")):
-                if not is_first_day:
-                    doc.add_paragraph("_" * 78)
-                is_first_day = False
+
+            # Heuristic to detect date line (doesn't start with '-' or a known section header)
+            is_date_line = not (
+                stripped_line.startswith("- ") or
+                stripped_line.startswith("Study Session:") or
+                stripped_line.startswith("Closed Session:") or
+                stripped_line.startswith("Special Presentations:") or
+                stripped_line.startswith("Consent:") or
+                stripped_line.startswith("Consideration or Public Hearing:")
+            )
+
+            if is_date_line:
+                if not is_first_date:
+                    doc.add_paragraph("_" * 78).paragraph_format.space_before = Pt(18)
+                is_first_date = False
+
                 p = doc.add_paragraph()
-                p.add_run(line).bold = True
                 p.paragraph_format.space_before = Pt(12)
-                continue
+                p.paragraph_format.space_after = Pt(6)
+                runner = p.add_run(stripped_line)
+                runner.bold = True
+                runner.font.size = Pt(14)
 
-            # Section header
-            if line.startswith(("Study Session:", "Closed Session:",
-                                "Special Presentations:", "Consent:",
-                                "Consideration or Public Hearing:")):
-                p = doc.add_paragraph(line, style="List Bullet")
+            # Check for section headers (Level 1 Bullet)
+            elif (stripped_line.startswith("Study Session:") or
+                  stripped_line.startswith("Closed Session:") or
+                  stripped_line.startswith("Special Presentations:") or
+                  stripped_line.startswith("Consent:") or
+                  stripped_line.startswith("Consideration or Public Hearing:")):
+                p = doc.add_paragraph(stripped_line, style='List Bullet')
                 p.paragraph_format.left_indent = Inches(0.25)
-                continue
+                p.paragraph_format.space_before = Pt(6)
 
-            # Bullet item
-            if line.startswith("- "):
-                p = doc.add_paragraph(line[2:], style="List Bullet")
+            elif stripped_line.startswith("- "):
+                # Item under a section (Level 2 Bullet)
+                p = doc.add_paragraph(stripped_line[2:].strip(), style='List Bullet')
                 p.paragraph_format.left_indent = Inches(0.75)
 
-        # Closing placeholders
-        doc.add_paragraph("_" * 78)
-        doc.add_paragraph().add_run("TBD:").bold = True
+        # Add horizontal line
+        doc.add_paragraph("_" * 78).paragraph_format.space_before = Pt(12)
+        
+        # TBD section
+        tbd = doc.add_paragraph("TBD:")
+        tbd.runs[0].bold = True
         doc.add_paragraph("[Placeholder for user to manually enter items.]")
-        last_rep = (datetime.now() - pd.Timedelta(days=60)).strftime("%B %d, %Y")
-        doc.add_paragraph().add_run(
-            f"Significant Items Completed Since {last_rep}:"
-        ).bold = True
+        doc.add_paragraph()
+        
+        # Significant items section
+        last_report_date = (datetime.now() - pd.Timedelta(days=60)).strftime("%B %d, %Y")
+        sig_items = doc.add_paragraph(f"Significant Items Completed Since {last_report_date}:")
+        sig_items.runs[0].bold = True
         doc.add_paragraph("[Placeholder for user to manually enter items.]")
-
+        
         return doc
-
-    # Utility for month range human-readable string
-    @staticmethod
-    def _month_range(dates: List[str]) -> str:
-        if not dates:
-            return datetime.now().strftime("%B %Y")
-        try:
-            parsed = [
-                datetime.strptime(f"{d}-{datetime.now().year}", "%d-%b-%Y")
-                for d in dates
-            ]
-            parsed.sort()
-        except Exception:
-            return datetime.now().strftime("%B %Y")
-
-        start, end = parsed[0], parsed[-1]
-        if start.strftime("%B %Y") == end.strftime("%B %Y"):
-            return start.strftime("%B %Y")
-        if start.year != end.year:
-            return f"{start:%B %Y} - {end:%B %Y}"
-        return f"{start:%B} - {end:%B, %Y}"

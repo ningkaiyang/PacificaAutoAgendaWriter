@@ -32,9 +32,9 @@ This application is currently in development (version 1.0) and serves as a power
 *   **Improved Error Messages:** Add more details to why a .csv import fails, potentially scanning across set of expected column headers in the .csv until a mismatch to what is expected occurs, and then saying that it expects column 'A' to be 'MEETING DATE', etc.
 *   **Parsing ALL rows:** Parse and display ALL rows in the checkbox menu, and only check the ones marked Y, to allow for overall viewing of spreadsheet within app. Make checkbox menu more condensed and optimized quicker to load because it lags right now.
 *   **Ignoring Certain Statements:** Parse out and ignore everything denoted by brackets [] in what is sent to the LLM.
-*   **Drag and Drop:** Fix drag and drop for .csv input.
-*   **Model Selection:** Allow for flexible model selection.
 *   **Back Button Stoppage:** Back button from generation screen cancels the LLM generation running in the background.
+*   **Model Selection:** Allow for flexible model selection from a specific folder/directory.
+*   **Drag and Drop:** Fix drag and drop for .csv input.
 
 ## Technical Stack
 *   **GUI:** `customtkinter`
