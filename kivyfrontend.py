@@ -1144,7 +1144,7 @@ class PacificaAgendaApp(App):
             "• Ensure consistent date formatting in your CSV\n"
             "• Keep agenda item descriptions clear and concise\n"
             "• Use the Notes field for additional context when needed\n"
-            "• Review the generated content before saving"
+            "• Review the generated content after saving as .docx before flattening to .pdf"
         )
         
         help_label = Label(
@@ -1194,7 +1194,7 @@ class PacificaAgendaApp(App):
         # scrollable area for the main content
         scroll = ScrollView(size_hint=(1, 1))
         # New layout to center content vertically within the scrollview
-        aligner_layout = BoxLayout(orientation="vertical", size_hint_y=1, padding=(0, 20)) # Added vertical padding for overall look
+        aligner_layout = BoxLayout(orientation="vertical", size_hint_y=1, padding=(0, 0)) # Adjusted vertical padding for overall look
         
         # Spacer above the content
         aligner_layout.add_widget(Widget())
@@ -1228,6 +1228,20 @@ class PacificaAgendaApp(App):
             )
             content.add_widget(lbl)
             content.add_widget(Widget(size_hint_y=None, height=5)) # reduced spacing
+
+        # Add logo similar to home screen
+        try:
+            from kivy.uix.image import Image as KivyImage
+            if os.path.exists("logo.png"):
+                logo_container = BoxLayout(orientation="horizontal", size_hint=(1, None), height=220) # slightly taller to accommodate padding
+                logo_container.add_widget(Widget(size_hint_x=1))  # spacer for centering
+                logo = KivyImage(source="logo.png", size_hint=(None, None), size=(200, 200)) # Larger square size
+                logo_container.add_widget(logo)
+                logo_container.add_widget(Widget(size_hint_x=1))  # spacer for centering
+                content.add_widget(logo_container)
+                content.add_widget(Widget(size_hint_y=None, height=20)) # spacing after logo
+        except Exception:
+            pass
 
         # app title
         add_centered("City of Pacifica\nAgenda Summary Generator", 46, bold=True)
