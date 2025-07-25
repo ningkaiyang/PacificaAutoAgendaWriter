@@ -627,6 +627,11 @@ class PacificaAgendaApp(App):
     sv_debug: ScrollView | None = None
     sv_gen_output: ScrollView | None = None
 
+    # New properties for dynamic layout control
+    generation_area: BoxLayout | None = None        # Reference to the main generation layout
+    gen_output_container: BoxLayout | None = None  # Reference to the main output container
+    debug_container: BoxLayout | None = None       # Reference to the debug console's container
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Config persistence
@@ -680,6 +685,9 @@ class PacificaAgendaApp(App):
 
         # Set initial model status in settings UI
         self._update_model_status()
+
+        # Set initial debug console visibility based on loaded config
+        self._update_debug_console_visibility(self.CONF["debug"])
 
         # bind drag-and-drop
         if platform in ("win", "linux", "macosx"):
@@ -958,13 +966,13 @@ class PacificaAgendaApp(App):
         layout.add_widget(top)
 
         # A container for all generation-related outputs that will take up the remaining space
-        generation_area = BoxLayout(orientation='vertical', spacing=10)
-        layout.add_widget(generation_area)
+        # Make this an instance variable
+        self.generation_area = BoxLayout(orientation='vertical', spacing=10)
+        layout.add_widget(self.generation_area)
 
         # --- Main Generation Output Area ---
         # This container will have a fixed proportional height, making the ScrollView stable.
-        gen_output_container = BoxLayout(orientation='vertical')
-        generation_area.add_widget(gen_output_container)
+        self.gen_output_container = BoxLayout(orientation='vertical')
 
         self.gen_output = TextInput(
             readonly=True,
@@ -978,46 +986,73 @@ class PacificaAgendaApp(App):
         self.sv_gen_output = ScrollView(scroll_wheel_distance=50)
         self.sv_gen_output.add_widget(self.gen_output)
         self.sv_gen_output.bind(on_scroll_stop=self._on_scroll_stop)
-        gen_output_container.add_widget(self.sv_gen_output)
+        self.gen_output_container.add_widget(self.sv_gen_output)
 
         # --- Optional Debug Console Area ---
-        if self.CONF["debug"]:
-            # In debug mode, split the vertical space 50/50
-            gen_output_container.size_hint_y = 0.5
-            
-            debug_container = BoxLayout(orientation='vertical', size_hint_y=0.5, spacing=5)
-            
-            debug_title = Label(
-                text="[b]Debug Console[/b]",
-                markup=True,
-                size_hint_y=None,
-                height=30,
-                color=TEXT_COLOR,
-                font_size=20
-            )
-            debug_container.add_widget(debug_title)
+        # ALWAYS create debug console components, their visibility is controlled later
+        # Initialize main output to full height; this will be adjusted by _update_debug_console_visibility
+        self.gen_output_container.size_hint_y = 1.0
+        self.generation_area.add_widget(self.gen_output_container)
 
-            self.debug_console = TextInput(
-                readonly=True,
-                size_hint_y=None,
-                background_color=[0.1, 0.1, 0.1, 1],
-                foreground_color=[0.8, 1.0, 0.8, 1],
-                font_size=14
-            )
-            self.debug_console.bind(minimum_height=self.debug_console.setter('height'))
+        self.debug_container = BoxLayout(orientation='vertical', size_hint_y=0.5, spacing=5)
+        
+        debug_title = Label(
+            text="[b]Debug Console[/b]",
+            markup=True,
+            size_hint_y=None,
+            height=30,
+            color=TEXT_COLOR,
+            font_size=20
+        )
+        self.debug_container.add_widget(debug_title)
 
-            self.sv_debug = ScrollView(scroll_wheel_distance=50)
-            self.sv_debug.add_widget(self.debug_console)
-            self.sv_debug.bind(on_scroll_stop=self._on_scroll_stop)
-            debug_container.add_widget(self.sv_debug)
+        self.debug_console = TextInput(
+            readonly=True,
+            size_hint_y=None,
+            background_color=[0.1, 0.1, 0.1, 1],
+            foreground_color=[0.8, 1.0, 0.8, 1],
+            font_size=14
+        )
+        self.debug_console.bind(minimum_height=self.debug_console.setter('height'))
 
-            generation_area.add_widget(debug_container)
-        else:
-            # In default mode, main output takes the full space
-            gen_output_container.size_hint_y = 1.0
+        self.sv_debug = ScrollView(scroll_wheel_distance=50)
+        self.sv_debug.add_widget(self.debug_console)
+        self.sv_debug.bind(on_scroll_stop=self._on_scroll_stop)
+        self.debug_container.add_widget(self.sv_debug)
+
+        # DO NOT add self.debug_container to self.generation_area here.
+        # This will be handled dynamically by _update_debug_console_visibility.
 
         self.screen_manager.add_widget(scr)
 
+    def _update_debug_console_visibility(self, visible: bool):
+        """
+        Dynamically adds/removes the debug console and adjusts layout.
+        Called from build() for initial setup and _toggle_debug() for runtime changes.
+        """
+        # Ensure all necessary widgets have been built and assigned to self.properties
+        if self.generation_area is None or self.gen_output_container is None or \
+           self.debug_container is None or self.debug_console is None or self.sv_debug is None:
+            print("Warning: Debug console components not fully initialized. Cannot update visibility.")
+            return
+
+        if visible:
+            # If debug is on, add debug_container and set proportional heights
+            if self.debug_container not in self.generation_area.children:
+                self.generation_area.add_widget(self.debug_container)
+            self.gen_output_container.size_hint_y = 0.5
+            self.debug_container.size_hint_y = 0.5
+        else:
+            # If debug is off, remove debug_container and make main output take full height
+            if self.debug_container in self.generation_area.children:
+                self.generation_area.remove_widget(self.debug_container)
+            self.gen_output_container.size_hint_y = 1.0
+            # self.debug_container.size_hint_y will retain 0.5 but won't be in layout.
+
+        # Schedule a layout update to ensure changes are applied immediately
+        # (A small delay can sometimes help Kivy's layout engine react better)
+        from kivy.clock import Clock
+        Clock.schedule_once(lambda dt: self.generation_area.do_layout(), 0)
 
     # ---------------------------------------------------------------- Settings
     def _build_settings(self):
@@ -1122,7 +1157,8 @@ class PacificaAgendaApp(App):
     def _toggle_debug(self, value: bool):
         self.CONF["debug"] = value
         self._save_conf()
-        self._show_info("Debug mode will apply on next app restart.")
+        # Immediately update the debug console's visibility
+        self._update_debug_console_visibility(value)
 
     def _open_prompt_editor(self, prompt_type: str):
         if prompt_type == "pass1":
