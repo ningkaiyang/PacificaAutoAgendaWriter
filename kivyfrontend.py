@@ -1,7 +1,6 @@
 """kivyfrontend.py
 City of Pacifica – Agenda Summary Generator (Kivy edition)
-
-Run:  python3 kivyfrontend.py
+ 
 Dependencies:
     pip install kivy pandas python-docx llama-cpp-python
 Optionally for prettier widgets you may install kivymd, but this file
@@ -34,6 +33,8 @@ from kivy.clock import mainthread
 from kivy.core.window import Window
 from kivy.graphics import Color, Rectangle, RoundedRectangle
 from kivy.properties import BooleanProperty, ListProperty, ObjectProperty, StringProperty
+from kivy.uix.widget import Widget
+from kivy.uix.gridlayout import GridLayout
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.checkbox import CheckBox
@@ -1060,50 +1061,87 @@ class PacificaAgendaApp(App):
         root = BoxLayout(orientation="vertical", padding=20, spacing=20)
         scr.add_widget(root)
 
-        title = Label(text="[b]Settings[/b]", markup=True, font_size=32, size_hint_y=None, height=80, color=[0, 0, 0, 1])  # increased font size and height
+        title = Label(text="[b]Settings[/b]", markup=True, font_size=48, size_hint_y=None, height=80, color=[0, 0, 0, 1])  # increased font size and height
         root.add_widget(title)
 
-        # Model installer
-        model_box = BoxLayout(orientation="horizontal", size_hint_y=None, height=75, spacing=10)
-        model_lbl = Label(text="Model:", color=[0, 0, 0, 1], size_hint_x=0.2, font_size=20)
-        self.model_status_lbl = Label(text="Checking...", color=[0, 0, 0, 1], halign="left", font_size=16)
-        self.model_status_lbl.bind(size=lambda inst, *_: inst.setter("text_size")(inst, (inst.width, None)))
-        self.install_model_btn = StyledButton(text="Install", size_hint=(None, None), width=180, height=75)
-        self.install_model_btn.bind(on_release=lambda *_: self._install_model())
-        model_box.add_widget(model_lbl)
-        model_box.add_widget(self.model_status_lbl)
-        model_box.add_widget(self.install_model_btn)
-        root.add_widget(model_box)
+        grid = GridLayout(cols=2, rows=3, row_force_default=True, row_default_height=75, spacing=(10,10), size_hint_y=None)
+        grid.bind(minimum_height=grid.setter('height'))
 
-        # Prompt Editor Section
-        prompt_edit_title = Label(
+        # Model row
+        label_model = Label(
+            text="Model",
+            color=[0, 0, 0, 1],
+            font_size=28,
+            bold=True,
+            halign='left',
+            valign='middle',
+            size_hint_x=0.3
+        )
+        label_model.bind(size=lambda inst, *_: inst.setter('text_size')(inst, (inst.width, None)))
+        self.model_status_lbl = Label(
+            text="Checking...",
+            color=[0, 0, 0, 1],
+            halign='left',
+            font_size=28
+        )
+        self.model_status_lbl.bind(size=lambda inst, *_: inst.setter('text_size')(inst, (inst.width, None)))
+        self.install_model_btn = StyledButton(
+            text="Install",
+            size_hint=(None, None),
+            width=180,
+            height=75
+        )
+        self.install_model_btn.bind(on_release=lambda *_: self._install_model())
+        control_model = BoxLayout(orientation="horizontal", spacing=10, size_hint_x=0.7)
+        control_model.add_widget(self.model_status_lbl)
+        control_model.add_widget(self.install_model_btn)
+        grid.add_widget(label_model)
+        grid.add_widget(control_model)
+
+        # Prompt Templates row
+        label_prompts = Label(
             text="Prompt Templates",
             color=[0, 0, 0, 1],
-            font_size=24, # A bit larger for a section title
+            font_size=28,
             bold=True,
-            size_hint_y=None,
-            height=40,
-            halign='left'
+            halign='left',
+            valign='middle',
+            size_hint_x=0.3
         )
-        prompt_edit_title.bind(size=lambda inst, *_: inst.setter("text_size")(inst, (inst.width, None)))
-        root.add_widget(prompt_edit_title)
-
-        prompt_btn_box = BoxLayout(orientation="horizontal", size_hint_y=None, height=75, spacing=15)
-
-        edit_p1_btn = StyledButton(text="Edit Pass 1 Prompt")
+        label_prompts.bind(size=lambda inst, *_: inst.setter('text_size')(inst, (inst.width, None)))
+        edit_p1_btn = StyledButton(text="Edit Pass 1 Prompt", size_hint_x=None, width=300)
         edit_p1_btn.bind(on_release=lambda *_: self._open_prompt_editor("pass1"))
-        prompt_btn_box.add_widget(edit_p1_btn)
-
-        edit_p2_btn = StyledButton(text="Edit Pass 2 Prompt")
+        edit_p2_btn = StyledButton(text="Edit Pass 2 Prompt", size_hint_x=None, width=300)
         edit_p2_btn.bind(on_release=lambda *_: self._open_prompt_editor("pass2"))
-        prompt_btn_box.add_widget(edit_p2_btn)
+        control_prompts = BoxLayout(orientation="horizontal", spacing=10, size_hint_x=0.7)
+        control_prompts.add_widget(edit_p1_btn)
+        control_prompts.add_widget(edit_p2_btn)
+        grid.add_widget(label_prompts)
+        grid.add_widget(control_prompts)
 
-        root.add_widget(prompt_btn_box)
+        # Debug Mode row
+        label_debug = Label(
+            text="Debug Mode",
+            color=[0, 0, 0, 1],
+            font_size=28,
+            bold=True,
+            halign='left',
+            valign='middle',
+            size_hint_x=0.3
+        )
+        label_debug.bind(size=lambda inst, *_: inst.setter('text_size')(inst, (inst.width, None)))
+        debug_checkbox = CheckBox(active=self.CONF["debug"], size_hint=(None, None), width=40, height=40)
+        debug_checkbox.bind(active=lambda _, v: self._toggle_debug(v))
+        control_debug = BoxLayout(orientation="horizontal", spacing=10, size_hint_x=0.7)
+        control_debug.add_widget(debug_checkbox)
+        grid.add_widget(label_debug)
+        grid.add_widget(control_debug)
 
-        # Debug switch
-        dbg_switch = ToggleSwitch("Debug Mode", self.CONF["debug"], self._toggle_debug)
-        root.add_widget(dbg_switch)
-
+        root.add_widget(grid)
+    
+        # NEW: Add a flexible spacer to push content to the top and leave space at the bottom
+        root.add_widget(Widget())
+    
         btn_bar = BoxLayout(size_hint_y=None, height=75, spacing=10)
         back_btn = StyledButton(text="Back", size_hint=(None, None), width=180, height=75)
         back_btn.bind(on_release=lambda *_: self._navigate_to("home"))  # use navigation method
