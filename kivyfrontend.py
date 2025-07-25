@@ -161,30 +161,44 @@ def native_save_file_dialog(title="Save File", filename="", file_types=None):
 class StyledButton(Button):
     """Flat button with Pacifica colours, rounded corners, shadow, and hover effect."""
     is_hovered = BooleanProperty(False)
+    # A ListProperty to store the base RGBA color of the button.
+    # This will be used by _update_color for all state changes.
+    base_bg_color_rgba = ListProperty([0, 0, 0, 0]) # Initial dummy value, will be set in __init__
 
-    def __init__(self, **kw):
+    def __init__(self, bg_color_name_override: str | None = None, **kw):
+        # Determine the initial base color based on override or default
+        initial_hex_color = bg_color_name_override if bg_color_name_override else PACIFICA_BLUE
+        self.base_bg_color_rgba = self.hex2rgba(initial_hex_color, 1.0) # Set the ListProperty here
+
         # set a default font_size if not provided by the caller
         if "font_size" not in kw:
-            kw["font_size"] = 26  # even larger default font size
+            kw["font_size"] = 26
 
         super().__init__(
             background_normal="",
             background_color=[0, 0, 0, 0],  # transparent background
             color=[1, 1, 1, 1],
-            **kw,
+            **kw, # 'bg_color_name_override' is now consumed by the method signature, not in **kw
         )
         
         # bind to mouse position to check for hover
         Window.bind(mouse_pos=self.on_mouse_pos)
-        self.bind(pos=self._update_rect, size=self._update_rect, state=self._update_color, is_hovered=self._update_color)
+        # Bind _update_color to relevant properties including base_bg_color_rgba
+        self.bind(
+            pos=self._update_rect,
+            size=self._update_rect,
+            state=self._update_color,
+            is_hovered=self._update_color,
+            base_bg_color_rgba=self._update_color # New binding for property changes
+        )
 
         with self.canvas.before:
             # Drop shadow
             self.shadow_color = Color(0, 0, 0, 0.2)
             self.shadow = RoundedRectangle(pos=self.pos, size=self.size, radius=[15])
             
-            # Main background
-            self.bg_color = Color(*self.hex2rgba(PACIFICA_BLUE, 1.0))
+            # Main background. Use base_bg_color_rgba for the initial color.
+            self.bg_color = Color(*self.base_bg_color_rgba) # Set initial drawing color from the property
             self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15])
 
     def on_mouse_pos(self, *args):
@@ -210,14 +224,22 @@ class StyledButton(Button):
 
     def _update_color(self, *_):
         """update color based on state (normal, hover, down)"""
+        # Get the current base color from the property
+        r, g, b, a = self.base_bg_color_rgba
+
         if self.state == 'down':
-            self.bg_color.rgba = self.hex2rgba(PACIFICA_BLUE, 0.7)  # darker when pressed
+            # Darker color when pressed (e.g., 70% intensity)
+            current_r, current_g, current_b = [min(1.0, max(0.0, c * 0.7)) for c in (r, g, b)]
+            self.bg_color.rgba = [current_r, current_g, current_b, a]
             self.shadow_color.a = 0.1 # less shadow when pressed
         elif self.is_hovered:
-            self.bg_color.rgba = self.hex2rgba("#5A94C8", 1.0)  # lighter blue on hover
+            # Lighter color on hover (e.g., 15% lighter)
+            current_r, current_g, current_b = [min(1.0, max(0.0, c * 1.15)) for c in (r, g, b)]
+            self.bg_color.rgba = [current_r, current_g, current_b, a]
             self.shadow_color.a = 0.4 # more prominent shadow on hover
         else:
-            self.bg_color.rgba = self.hex2rgba(PACIFICA_BLUE, 1.0)
+            # Normal state, use the base color
+            self.bg_color.rgba = self.base_bg_color_rgba
             self.shadow_color.a = 0.2 # normal shadow
 
     @staticmethod
@@ -1128,7 +1150,7 @@ class PacificaAgendaApp(App):
         title = Label(text="[b]Settings[/b]", markup=True, font_size=48, size_hint_y=None, height=80, color=[0, 0, 0, 1])  # increased font size and height
         root.add_widget(title)
 
-        grid = GridLayout(cols=2, rows=3, row_force_default=True, row_default_height=75, spacing=(10,10), size_hint_y=None)
+        grid = GridLayout(cols=2, rows=4, row_force_default=True, row_default_height=75, spacing=(10,10), size_hint_y=None)
         grid.bind(minimum_height=grid.setter('height'))
 
         # Model row
