@@ -968,7 +968,7 @@ class PacificaAgendaApp(App):
 
         self.gen_output = TextInput(
             readonly=True,
-            font_size=16,
+            font_size=28,
             foreground_color=[0, 0, 0, 1],
             background_color=[1, 1, 1, 1],
             size_hint_y=None,
