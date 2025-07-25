@@ -29,8 +29,6 @@ This application is currently at **Version 2.0 (Kivy Edition)**. It represents a
 ## TBD (Future Development)
 *   **Video Demonstration:** A link to a video demonstration is planned to be added to the help tab in the future.
 *   **Help Tab Improvements:** Plans are underway to enhance the help tab with more detailed instructions, comprehensive troubleshooting tips, and additional resources.
-*   **Settings Menu: Ignoring Certain Statements:** Implement logic to parse and ignore any text enclosed within square brackets `[]` before sending the content to the LLM. It shouldn't ignore stuff to the right or left of just a single bracket, they need to be closed to execute the cut-out. And they should be in the same cell in the spreadsheet, so only check for `[]` within a cell and remove whatever is in between. Maybe make it another toggle-able setting in the settings menu, whether to strip out `[]` or not.
-*   **Settings Menu: Uninstall App:** Implement a feature within the settings menu to cleanly remove all cached application files, such as the downloaded model and any stored JSON settings. Not sure what is the best way to determine where those files are. On my mac they are at '/Users/ningkaiyang/Library/Application Support/pacificaagenda'. But you only need to account for MacOS and Windows filesystems. Once that is done, the user can be prompted to delete the current actual runtime app by dragging and dropping the app to the trash, it should just be whatever executable file is open with no other strings attatched.
 
 ## Technical Stack
 *   **GUI:** `Kivy`

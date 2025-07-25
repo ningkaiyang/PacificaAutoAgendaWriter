@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -254,10 +255,13 @@ class TogglableStyledButton(StyledButton):
 
     def _update_visuals(self, instance, value):
         """Update button text and trigger a color update."""
-        if self.active:
-            self.text = "Debug Mode Enabled"
+        if hasattr(self, 'text_on') and hasattr(self, 'text_off'):
+            self.text = self.text_on if self.active else self.text_off
         else:
-            self.text = "Debug Mode Disabled"
+            if self.active:
+                self.text = "Debug Mode Enabled"
+            else:
+                self.text = "Debug Mode Disabled"
         self._update_color()
 
     def _update_color(self, *_):
@@ -708,6 +712,7 @@ class PacificaAgendaApp(App):
             "prompt_pass1": None,
             "prompt_pass2": None,
             "debug": False,
+            "ignore_brackets": False,
         }
         try:
             with open(self.config_file, "r", encoding="utf-8") as fp:
@@ -1202,6 +1207,32 @@ class PacificaAgendaApp(App):
         grid.add_widget(label_debug)
         grid.add_widget(control_debug)
 
+        # Ignore Brackets row
+        label_brackets = Label(
+            text="Ignore Brackets []",
+            color=[0, 0, 0, 1],
+            font_size=28,
+            bold=True,
+            halign='left',
+            valign='middle',
+            size_hint_x=0.3
+        )
+        label_brackets.bind(size=lambda inst, *_: inst.setter('text_size')(inst, (inst.width, None)))
+        brackets_toggle_btn = TogglableStyledButton(
+            initial_active=self.CONF.get("ignore_brackets", False),
+            callback=self._toggle_ignore_brackets,
+            size_hint=(None, None),
+            width=320,
+            height=75
+        )
+        brackets_toggle_btn.text_on = "Ignoring Brackets"
+        brackets_toggle_btn.text_off = "Not Ignoring Brackets"
+        control_brackets = BoxLayout(orientation="horizontal", spacing=10, size_hint_x=0.7)
+        control_brackets.add_widget(brackets_toggle_btn)
+        control_brackets.add_widget(Widget())
+        grid.add_widget(label_brackets)
+        grid.add_widget(control_brackets)
+
         root.add_widget(grid)
     
         # NEW: Add a flexible spacer to push content to the top and leave space at the bottom
@@ -1209,10 +1240,22 @@ class PacificaAgendaApp(App):
     
         btn_bar = BoxLayout(size_hint_y=None, height=75, spacing=10)
         back_btn = StyledButton(text="Back", size_hint=(None, None), width=180, height=75)
-        back_btn.bind(on_release=lambda *_: self._navigate_to("home"))  # use navigation method
-        btn_bar.add_widget(back_btn)
-        root.add_widget(btn_bar)
+        back_btn.bind(on_release=lambda *_: self._navigate_to("home"))
 
+        uninstall_btn = StyledButton(
+            text="Uninstall",
+            size_hint=(None, None),
+            width=220,
+            height=75,
+            bg_color_name_override="#D9534F"  # Red color for uninstall button
+        )
+        uninstall_btn.bind(on_release=lambda *_: self._confirm_uninstall())
+
+        btn_bar.add_widget(back_btn)
+        btn_bar.add_widget(Widget())  # Spacer
+        btn_bar.add_widget(uninstall_btn)
+
+        root.add_widget(btn_bar)
         self.screen_manager.add_widget(scr)
 
     # pickers
@@ -1264,6 +1307,10 @@ class PacificaAgendaApp(App):
         self._save_conf()
         # Immediately update the debug console's visibility
         self._update_debug_console_visibility(value)
+
+    def _toggle_ignore_brackets(self, value: bool):
+        self.CONF["ignore_brackets"] = value
+        self._save_conf()
 
     def _open_prompt_editor(self, prompt_type: str):
         if prompt_type == "pass1":
@@ -1329,6 +1376,64 @@ class PacificaAgendaApp(App):
 
         popup.open()
 
+    def _confirm_uninstall(self):
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+
+        label = Label(
+            text="This will delete all cached data, including the downloaded model and settings.\n"
+                 "The application will close, and you will need to manually drag the app to the Trash.\n\n"
+                 "[b]Are you sure you want to continue?[/b]",
+            markup=True,
+            halign='center'
+        )
+        content.add_widget(label)
+
+        btn_layout = BoxLayout(size_hint_y=None, height=75, spacing=10)
+        cancel_btn = StyledButton(text="Cancel")
+        confirm_btn = StyledButton(text="Uninstall", bg_color_name_override="#D9534F")
+        btn_layout.add_widget(cancel_btn)
+        btn_layout.add_widget(confirm_btn)
+        content.add_widget(btn_layout)
+
+        popup = Popup(title="Confirm Uninstall", content=content, size_hint=(0.7, 0.5), auto_dismiss=False)
+
+        def on_confirm(*_):
+            popup.dismiss()
+            self._do_uninstall()
+
+        def on_cancel(*_):
+            popup.dismiss()
+
+        confirm_btn.bind(on_release=on_confirm)
+        cancel_btn.bind(on_release=on_cancel)
+
+        popup.open()
+
+    def _do_uninstall(self):
+        try:
+            data_dir = self.user_data_dir
+            if os.path.exists(data_dir):
+                shutil.rmtree(data_dir)
+
+            # Show a final message before quitting
+            final_msg_content = Label(
+                text="Application data has been removed.\n"
+                     "Please drag the application to the Trash to complete uninstallation.",
+                halign='center'
+            )
+            popup = Popup(title="Uninstall Complete", content=final_msg_content, size_hint=(0.6, 0.4))
+
+            # Use a clock schedule to close the app after the popup is shown
+            from kivy.clock import Clock
+            def close_app(*_):
+                self.stop()
+
+            popup.bind(on_dismiss=close_app)
+            popup.open()
+
+        except Exception as e:
+            self._show_error("Uninstall Error", f"Could not remove application data: {e}")
+
     # ---------------------------------------------------------------- Help & Credits
     def _build_help(self):
         scr = HelpScreen(name="help")
@@ -1376,6 +1481,9 @@ class PacificaAgendaApp(App):
             "• Once generation is complete, click 'Save'\n"
             "• Choose your save location using the native file dialog\n"
             "• The report will be saved as a Word (.docx) document\n\n"
+            "[size=30][b]Settings Menu[/b][/size]\n"
+            "• [b]Ignore Brackets[/b]: Toggle this setting to ignore any text within square brackets `[]` in the source CSV file.\n"
+            "• [b]Uninstall[/b]: This will remove all cached application data, including the downloaded model and settings. The application will close, and you will need to manually drag the app to the Trash to complete the uninstallation.\n\n"
             "[size=30][b]Tips for Best Results[/b][/size]\n"
             "• Ensure consistent date formatting in your CSV\n"
             "• Keep agenda item descriptions clear and concise\n"
@@ -1557,6 +1665,7 @@ class PacificaAgendaApp(App):
                 prompt_template_pass1=self.prompt_pass1,
                 prompt_template_pass2=self.prompt_pass2,
                 debug_callback=debug_cb,
+                ignore_brackets=self.CONF.get("ignore_brackets", False),
             )
         except RuntimeError as exc:
             self._show_error("Model Error", str(exc))

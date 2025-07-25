@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import sys
 import threading
 import time
@@ -375,7 +376,168 @@ class AgendaBackend:
         prompt_template_pass1: str | None = None,
         prompt_template_pass2: str | None = None,
         debug_callback: Callable[[str], None] | None = None,
+        ignore_brackets: bool = False,
     ):
+        gui_filter = GUITokenFilter()
+
+        try:
+            # Group rows by date, preserving original order
+            grouped: dict[str, List[pd.Series]] = {}
+            ordered_dates: List[str] = []
+            for r in rows:
+                date = str(r["MEETING DATE"])
+                if date not in grouped:
+                    grouped[date] = []
+                    ordered_dates.append(date)
+                grouped[date].append(r)
+
+            full_output = ""
+
+            for md in ordered_dates:
+                if cancel_event and cancel_event.is_set():
+                    if debug_cb:
+                        debug_cb("\n[backend] Generation cancelled by user.\n")
+                    else:
+                        print("\n[backend] Generation cancelled by user.")
+                    return
+                items = grouped[md]
+                items.sort(key=lambda x: str(x.get("AGENDA SECTION", "")))
+
+                # Build items text for summarisation pass
+                items_text = ""
+                for it in items:
+                    sec = str(it.get("AGENDA SECTION", "N/A")).replace("\n", " ").replace("•", "-").strip()
+                    if sec == "nan":
+                        sec = "placeholder"
+                    title = str(it.get("AGENDA ITEM", "N/A")).replace("\n", " ").replace("•", "-").strip()
+                    if title == "nan":
+                        title = "unnamed item"
+                    notes_val = it.get("NOTES")
+                    entry = f"- Item: {title}, Section: \"{sec}\""
+                    if pd.notna(notes_val):
+                        notes = str(notes_val).replace("\n", " ").replace("•", "-").strip()
+                        if notes and notes.lower() != "nan":
+                            entry += f", Notes: \"{notes}\""
+
+                    if ignore_brackets:
+                        entry = re.sub(r'\[.*?\]', '', entry)
+
+                    items_text += entry + "\n"
+
+                # ------------ PASS 1 – single-line summaries
+                template_pass1 = prompt_template_pass1 or PROMPT_TEMPLATE_PASS1
+                summarization_prompt = template_pass1.format(
+                    md=md, items_text=items_text.strip()
+                )
+
+                if debug_cb:
+                    debug_cb("\n" + "="*20 + " PASS 1: SUMMARIZATION " + "="*20 + "\n")
+                    debug_cb("--- PROMPT INPUT ---\n")
+                    debug_cb(summarization_prompt)
+                    debug_cb("\n\n--- LLM OUTPUT ---\n")
+                else:
+                    print("\n--- PASS 1: SUMMARIZATION ---")
+
+                pass1_stream = self.llm_model.create_chat_completion(
+                    messages=[{"role": "user", "content": summarization_prompt}],
+                    max_tokens=10_000,
+                    temperature=0,
+                    top_p=0.0,
+                    top_k=20,
+                    stream=True,
+                )
+
+                # Collect summarized items from Pass 1
+                think_streamer = TokenStreamer(debug_callback=debug_cb)
+                raw_summary = ""
+                for chunk in pass1_stream:
+                    if cancel_event and cancel_event.is_set():
+                        if debug_cb:
+                            debug_cb("\n[backend] Generation cancelled by user.\n")
+                        else:
+                            print("\n[backend] Generation cancelled by user.")
+                        return
+                    token = chunk["choices"][0]["delta"].get("content", "")
+                    # Stream raw Pass 1 output (including <think> tags) to GUI
+                    if token and token_cb:
+                        token_cb(token)
+                    raw_summary += token
+                    think_streamer(chunk)  # count tokens and print for debug
+                think_streamer.done()
+
+                # Clean up summarized_items to remove any incomplete thinking tags
+                # and extract only the actual bullet point content
+                clean_summary = self._extract_clean_summary(raw_summary)
+
+                # ------------ PASS 2 – final formatting
+                template_pass2 = prompt_template_pass2 or PROMPT_TEMPLATE_PASS2
+                format_prompt = template_pass2.format(
+                    meeting_date=md, items_text=clean_summary.strip()
+                ) + " /no_think"
+
+                if debug_cb:
+                    debug_cb("\n" + "="*20 + " PASS 2: FORMATTING " + "="*20 + "\n")
+                    debug_cb("--- PROMPT INPUT ---\n")
+                    debug_cb(format_prompt)
+                    debug_cb("\n\n--- LLM OUTPUT ---\n")
+                else:
+                    print("\n--- PASS 2: FORMATTING ---")
+
+                pass2_stream = self.llm_model.create_chat_completion(
+                    messages=[{"role": "user", "content": format_prompt}],
+                    max_tokens=10_000,
+                    temperature=0,
+                    top_p=0.0,
+                    top_k=20,
+                    stream=True,
+                )
+
+                # This is the stream we will show to the user
+                # Stream to console (unfiltered) and GUI (raw)
+                streamer = TokenStreamer(debug_callback=debug_cb)
+
+                for chunk in pass2_stream:
+                    if cancel_event and cancel_event.is_set():
+                        if debug_cb:
+                            debug_cb("\n[backend] Generation cancelled by user.\n")
+                        else:
+                            print("\n[backend] Generation cancelled by user.")
+                        return
+                    # Console output (unfiltered for debugging)
+                    streamer(chunk)
+
+                    tok = chunk["choices"][0]["delta"].get("content", "")
+                    if tok:
+                        # Stream raw token to GUI to show full process
+                        if token_cb:
+                            token_cb(tok)
+
+                        # Filter token to build the clean report for saving
+                        cleaned = gui_filter.filter_token(tok)
+                        if cleaned:
+                            full_output += cleaned
+
+                streamer.done()
+
+                # Separate dates
+                if token_cb:
+                    token_cb("\n\n")
+                full_output += "\n\n"
+
+            if cancel_event and cancel_event.is_set():
+                if debug_cb:
+                    debug_cb("\n[backend] Generation cancelled by user.\n")
+                else:
+                    print("\n[backend] Generation cancelled by user.")
+                return
+            if done_cb:
+                done_cb(full_output, ordered_dates)
+
+        except Exception as exc:  # pragma: no cover
+            if err_cb:
+                err_cb(exc)
+            else:
+                traceback.print_exc()
         """
         Two-pass streaming generation.
         • token_callback receives GUI-safe text snippets.
