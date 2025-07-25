@@ -615,6 +615,9 @@ class PacificaAgendaApp(App):
     selected_indices: set[int] = set()
     generation_cancel_event = threading.Event()
 
+    auto_scroll_gen = BooleanProperty(True)
+    auto_scroll_debug = BooleanProperty(True)
+
     generated_report_text = ""
     meeting_dates_for_report: List[str] = []
     prompt_pass1: str = ""
@@ -954,25 +957,35 @@ class PacificaAgendaApp(App):
 
         layout.add_widget(top)
 
-        # scrollable log textbox
+        # A container for all generation-related outputs that will take up the remaining space
+        generation_area = BoxLayout(orientation='vertical', spacing=10)
+        layout.add_widget(generation_area)
+
+        # --- Main Generation Output Area ---
+        # This container will have a fixed proportional height, making the ScrollView stable.
+        gen_output_container = BoxLayout(orientation='vertical')
+        generation_area.add_widget(gen_output_container)
+
         self.gen_output = TextInput(
             readonly=True,
             font_size=16,
             foreground_color=[0, 0, 0, 1],
             background_color=[1, 1, 1, 1],
-            size_hint_y=None,  # CRITICAL for use in ScrollView
+            size_hint_y=None,
         )
-        # This binding makes the TextInput grow with its content
         self.gen_output.bind(minimum_height=self.gen_output.setter('height'))
 
-        # Store the ScrollView instance to control scrolling later
         self.sv_gen_output = ScrollView(scroll_wheel_distance=50)
         self.sv_gen_output.add_widget(self.gen_output)
-        layout.add_widget(self.sv_gen_output)
+        self.sv_gen_output.bind(on_scroll_stop=self._on_scroll_stop)
+        gen_output_container.add_widget(self.sv_gen_output)
 
-        # Optional debug console under generation output if enabled
+        # --- Optional Debug Console Area ---
         if self.CONF["debug"]:
-            debug_container = BoxLayout(orientation='vertical', size_hint_y=0.6, spacing=5)
+            # In debug mode, split the vertical space 50/50
+            gen_output_container.size_hint_y = 0.5
+            
+            debug_container = BoxLayout(orientation='vertical', size_hint_y=0.5, spacing=5)
             
             debug_title = Label(
                 text="[b]Debug Console[/b]",
@@ -986,20 +999,22 @@ class PacificaAgendaApp(App):
 
             self.debug_console = TextInput(
                 readonly=True,
-                size_hint_y=None,  # Critical for use inside a ScrollView
-                # Do not set a font_name; let Kivy use its default to avoid font-not-found crashes.
+                size_hint_y=None,
                 background_color=[0.1, 0.1, 0.1, 1],
-                foreground_color=[0.8, 1.0, 0.8, 1], # Green text on black
+                foreground_color=[0.8, 1.0, 0.8, 1],
                 font_size=14
             )
-            # This binding makes the TextInput grow vertically to fit its content
             self.debug_console.bind(minimum_height=self.debug_console.setter('height'))
 
             self.sv_debug = ScrollView(scroll_wheel_distance=50)
             self.sv_debug.add_widget(self.debug_console)
+            self.sv_debug.bind(on_scroll_stop=self._on_scroll_stop)
             debug_container.add_widget(self.sv_debug)
 
-            layout.add_widget(debug_container)
+            generation_area.add_widget(debug_container)
+        else:
+            # In default mode, main output takes the full space
+            gen_output_container.size_hint_y = 1.0
 
         self.screen_manager.add_widget(scr)
 
@@ -1367,9 +1382,20 @@ class PacificaAgendaApp(App):
             self._show_error("Nothing Selected", "Please select at least one row.")
             return
         rows = [self.filtered_items[i] for i in sorted(self.selected_indices)]
+
+        # Reset auto-scroll state for the new generation
+        self.auto_scroll_gen = True
+        self.auto_scroll_debug = True
+
+        from kivy.clock import Clock
+
+        # Clear and prepare main output for generation
         self.gen_output.text = "Generating...\n"
-        if self.debug_console:
+
+        # Clear and prepare debug console, then schedule scroll to bottom
+        if self.debug_console and self.sv_debug:
             self.debug_console.text = ""
+            Clock.schedule_once(lambda dt: setattr(self.sv_debug, 'scroll_y', 0), -1)
 
         self.save_button.disabled = True
         self.generation_cancel_event.clear()
@@ -1412,17 +1438,16 @@ class PacificaAgendaApp(App):
             self.gen_output.text += txt
             return
 
-        # Smart scrolling: only auto-scroll if user is at the bottom
-        # A small tolerance is used for floating point inaccuracies.
-        is_at_bottom = self.sv_gen_output.scroll_y <= 0.01
-
         self.gen_output.text += txt
 
-        if is_at_bottom:
-            # Schedule scroll to bottom after text is added and UI updated.
-            # Using -1 schedules it for the next frame.
+        if self.auto_scroll_gen:
+            def scroll_if_needed(dt):
+                # Only scroll if the content is taller than the view to prevent visual glitches.
+                if self.sv_gen_output and self.gen_output and self.sv_gen_output.height < self.gen_output.height:
+                    self.sv_gen_output.scroll_y = 0
+            
             from kivy.clock import Clock
-            Clock.schedule_once(lambda dt: setattr(self.sv_gen_output, 'scroll_y', 0), -1)
+            Clock.schedule_once(scroll_if_needed, -1)
 
     def _done_cb(self, full_text: str, dates: List[str]):
         if self.generation_cancel_event.is_set():
@@ -1436,20 +1461,37 @@ class PacificaAgendaApp(App):
         self._show_error("Generation Error", str(exc))
         self.screen_manager.current = "review"
 
+    def _on_scroll_stop(self, scroll_view, touch=None):
+        """
+        Detects user scrolling to enable/disable auto-scroll.
+        This is bound to on_scroll_stop, which fires when scrolling ceases.
+        The `touch` argument may be None.
+        """
+        # A small threshold to reliably detect if scrolled away from bottom.
+        # scroll_y is 0 at bottom, 1 at top.
+        is_at_bottom = scroll_view.scroll_y <= 0.01
+
+        if scroll_view == self.sv_gen_output:
+            self.auto_scroll_gen = is_at_bottom
+        elif scroll_view == self.sv_debug:
+            self.auto_scroll_debug = is_at_bottom
+
     @mainthread
     def _update_debug_console(self, text: str):
         """Callback to append text to the debug console from a worker thread."""
         if not (self.debug_console and self.sv_debug):
             return
 
-        # Smart scrolling: only auto-scroll if user is at the bottom
-        is_at_bottom = self.sv_debug.scroll_y <= 0.01
-
         self.debug_console.text += text
 
-        if is_at_bottom:
+        if self.auto_scroll_debug:
+            def scroll_if_needed(dt):
+                # Only scroll if the content is taller than the view to prevent visual glitches.
+                if self.sv_debug and self.debug_console and self.sv_debug.height < self.debug_console.height:
+                    self.sv_debug.scroll_y = 0
+
             from kivy.clock import Clock
-            Clock.schedule_once(lambda dt: setattr(self.sv_debug, 'scroll_y', 0), -1)
+            Clock.schedule_once(scroll_if_needed, -1)
 
     # ---------------------------------------------------------------- Save document
     def _save_report(self):
