@@ -608,16 +608,16 @@ class AgendaBackend:
                 items_text = ""
                 for it in items:
                     sec = str(it.get("AGENDA SECTION", "N/A")).replace("\n", " ").replace("•", "-").strip()
-                    if sec == "nan":
+                    if sec == "nan" or "":
                         sec = "placeholder"
                     title = str(it.get("AGENDA ITEM", "N/A")).replace("\n", " ").replace("•", "-").strip()
-                    if title == "nan":
+                    if title == "nan" or "":
                         title = "unnamed item"
                     notes_val = it.get("NOTES")
                     entry = f"- Item: {title}, Section: \"{sec}\""
                     if pd.notna(notes_val):
                         notes = str(notes_val).replace("\n", " ").replace("•", "-").strip()
-                        if notes and notes.lower() != "nan":
+                        if (notes.lower() != "nan") and (notes != ""):
                             entry += f", Notes: \"{notes}\""
                     items_text += entry + "\n"
 

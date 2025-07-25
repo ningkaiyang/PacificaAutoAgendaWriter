@@ -1504,7 +1504,7 @@ class PacificaAgendaApp(App):
             "• Choose your save location using the native file dialog\n"
             "• The report will be saved as a Word (.docx) document\n\n"
             "[size=30][b]Settings Menu[/b][/size]\n"
-            "• [b]Ignore Brackets[/b]: Toggle this setting to ignore any text within square brackets `[]` in the source CSV file.\n"
+            "• [b]Ignore Brackets[/b]: Toggle this setting to ignore any text within square brackets '[]' in the source CSV file.\n"
             "• [b]Uninstall[/b]: This will remove all cached application data, including the downloaded model and settings. The application will close, and you will need to manually drag the app to the Trash to complete the uninstallation.\n\n"
             "[size=30][b]Tips for Best Results[/b][/size]\n"
             "• Ensure consistent date formatting in your CSV\n"
