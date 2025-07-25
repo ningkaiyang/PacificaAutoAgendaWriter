@@ -225,8 +225,67 @@ class StyledButton(Button):
         return [int(hx[i : i + 2], 16) / 255.0 for i in (0, 2, 4)] + [alpha]
 
 
+class TogglableStyledButton(StyledButton):
+    """A StyledButton that can be toggled between active/inactive states."""
+    active = BooleanProperty(False)
+
+    def __init__(self, initial_active: bool, callback: Callable[[bool], None], **kw):
+        # Text is managed internally, remove from kwargs if present.
+        kw.pop("text", None)
+        super().__init__(**kw)
+        self.active = initial_active
+        self._callback = callback
+
+        # Bind visuals update to 'active' property change.
+        # This will handle text update and trigger color update.
+        self.bind(active=self._update_visuals)
+        self.bind(on_release=self._on_release_toggle)
+
+        # The parent StyledButton binds _update_color to state and is_hovered.
+        # Our override of _update_color will be used automatically.
+        
+        # Set initial text and color.
+        self._update_visuals(self, self.active)
+
+    def _on_release_toggle(self, *args):
+        """Toggle active state and call the callback."""
+        self.active = not self.active
+        self._callback(self.active)
+
+    def _update_visuals(self, instance, value):
+        """Update button text and trigger a color update."""
+        if self.active:
+            self.text = "Debug Mode Enabled"
+        else:
+            self.text = "Debug Mode Disabled"
+        self._update_color()
+
+    def _update_color(self, *_):
+        """Override to integrate active state into hover/down logic."""
+        if self.active:
+            # Green shades for "Enabled"
+            base_color = "#5CB85C"
+            hover_color = "#6DC06D"
+            pressed_color = "#4CAF50"
+        else:
+            # Red shades for "Disabled"
+            base_color = "#D9534F"
+            hover_color = "#E06B68"
+            pressed_color = "#C9302C"
+
+        if self.state == 'down':
+            self.bg_color.rgba = self.hex2rgba(pressed_color, 0.9)
+            self.shadow_color.a = 0.1
+        elif self.is_hovered:
+            self.bg_color.rgba = self.hex2rgba(hover_color, 1.0)
+            self.shadow_color.a = 0.4
+        else:
+            self.bg_color.rgba = self.hex2rgba(base_color, 1.0)
+            self.shadow_color.a = 0.2
+
+
 class ToggleSwitch(BoxLayout):
-    """Simple labelled on/off switch."""
+    """Simple labelled on/off switch. This class is now obsolete."""
 
     active = BooleanProperty(False)
 
@@ -1130,10 +1189,16 @@ class PacificaAgendaApp(App):
             size_hint_x=0.3
         )
         label_debug.bind(size=lambda inst, *_: inst.setter('text_size')(inst, (inst.width, None)))
-        debug_checkbox = CheckBox(active=self.CONF["debug"], size_hint=(None, None), width=40, height=40)
-        debug_checkbox.bind(active=lambda _, v: self._toggle_debug(v))
+        debug_toggle_btn = TogglableStyledButton(
+            initial_active=self.CONF["debug"],
+            callback=self._toggle_debug,
+            size_hint=(None, None),
+            width=320, # Wider to fit "Debug Mode Disabled"
+            height=75
+        )
         control_debug = BoxLayout(orientation="horizontal", spacing=10, size_hint_x=0.7)
-        control_debug.add_widget(debug_checkbox)
+        control_debug.add_widget(debug_toggle_btn)
+        control_debug.add_widget(Widget()) # Add a spacer to push button to left if control_debug takes more space
         grid.add_widget(label_debug)
         grid.add_widget(control_debug)
 
@@ -1156,12 +1221,14 @@ class PacificaAgendaApp(App):
         model_path = self.CONF.get("model_path")
         if model_path and os.path.exists(model_path):
             self.model_status_lbl.text = f"Installed at {model_path}"
+            self.install_model_btn.text = "Ready" # Change text to "Ready"
             self.install_model_btn.disabled = True
             # Also update backend instance if needed
             if not self.backend.llm_model and self.backend.model_path:
                 self.backend._load_llm_model_async()
         else:
             self.model_status_lbl.text = f"Not Installed ({MODEL_FILENAME})"
+            self.install_model_btn.text = "Install" # Ensure text is "Install" if not installed
             self.install_model_btn.disabled = False
 
     def _install_model(self):
