@@ -253,12 +253,14 @@ class TogglableStyledButton(StyledButton):
     """A StyledButton that can be toggled between active/inactive states."""
     active = BooleanProperty(False)
 
-    def __init__(self, initial_active: bool, callback: Callable[[bool], None], **kw):
+    def __init__(self, initial_active: bool, callback: Callable[[bool], None], text_on: str | None = None, text_off: str | None = None, **kw):
         # Text is managed internally, remove from kwargs if present.
         kw.pop("text", None)
         super().__init__(**kw)
         self.active = initial_active
         self._callback = callback
+        self.text_on = text_on or "Debug Mode Enabled"
+        self.text_off = text_off or "Debug Mode Disabled"
 
         # Bind visuals update to 'active' property change.
         # This will handle text update and trigger color update.
@@ -278,13 +280,7 @@ class TogglableStyledButton(StyledButton):
 
     def _update_visuals(self, instance, value):
         """Update button text and trigger a color update."""
-        if hasattr(self, 'text_on') and hasattr(self, 'text_off'):
-            self.text = self.text_on if self.active else self.text_off
-        else:
-            if self.active:
-                self.text = "Debug Mode Enabled"
-            else:
-                self.text = "Debug Mode Disabled"
+        self.text = self.text_on if self.active else self.text_off
         self._update_color()
 
     def _update_color(self, *_):
@@ -337,19 +333,20 @@ class UploadZone(BoxLayout):
         )
         self.app_instance = app_instance
         self.is_hovered = False
-        
+        self.is_uninstalled_state = False
+
         # create the visual background
         with self.canvas.before:
             Color(*StyledButton.hex2rgba("#FFFFFF", 1))  # white base background
             self._bg_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15])
-            Color(*StyledButton.hex2rgba(PACIFICA_BLUE, 0.4))  # blue overlay
+            self.overlay_color = Color(*StyledButton.hex2rgba(PACIFICA_BLUE, 0.4))  # blue overlay
             self._overlay_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15])
-        
+
         self.bind(pos=self._update_canvas, size=self._update_canvas)
-        
+
         # main upload text/button
         self.upload_label = Label(
-            text="[size=48][b]Click to Upload CSV[/b][/size]\n[size=28]or drag and drop your file here[/size]",  # increased font sizes
+            text="[size=48][b]Click to Upload CSV[/b][/size]\n[size=28]or drag and drop your file here[/size]",
             markup=True,
             halign="center",
             valign="middle",
@@ -357,12 +354,12 @@ class UploadZone(BoxLayout):
         )
         self.upload_label.bind(size=self._update_text_size)
         self.add_widget(self.upload_label)
-        
+
         # add some visual spacing
         self.add_widget(Widget(size_hint_y=0.2))
-        
+
         # file format hint
-        hint_label = Label(
+        self.hint_label = Label(
             text="[size=22]Supported format: CSV files only[/size]",  # increased font size
             markup=True,
             halign="center",
@@ -371,8 +368,21 @@ class UploadZone(BoxLayout):
             size_hint_y=None,
             height=35,  # increased height
         )
-        hint_label.bind(size=lambda inst, *_: inst.setter("text_size")(inst, (inst.width, None)))
-        self.add_widget(hint_label)
+        self.hint_label.bind(size=lambda inst, *_: inst.setter("text_size")(inst, (inst.width, None)))
+        self.add_widget(self.hint_label)
+
+    def set_uninstalled_state(self, is_uninstalled):
+        self.is_uninstalled_state = is_uninstalled
+        if is_uninstalled:
+            self.upload_label.text = "[size=48][b]App Not Installed[/b][/size]\n[size=28]Please go to Settings to install the model.[/size]"
+            self.hint_label.text = ""
+            self.overlay_color.rgba = StyledButton.hex2rgba("#D9534F", 0.7) # Red
+        else:
+            self.upload_label.text = "[size=48][b]Click to Upload CSV[/b][/size]\n[size=28]or drag and drop your file here[/size]"
+            self.hint_label.text = "[size=22]Supported format: CSV files only[/size]"
+            self.overlay_color.rgba = StyledButton.hex2rgba(PACIFICA_BLUE, 0.4) # Blue
+        self._set_hover_state(False)
+
 
     def _update_canvas(self, *_):
         """update canvas rectangles when position/size changes"""
@@ -388,31 +398,36 @@ class UploadZone(BoxLayout):
     def on_touch_down(self, touch):
         """handle clicks anywhere in the upload zone"""
         if self.collide_point(*touch.pos):
+            if self.is_uninstalled_state:
+                self.app_instance._navigate_to("settings")
+                return True
             # add visual feedback by temporarily darkening the zone
             self._set_hover_state(True)
             # trigger file browser
             self.app_instance._open_file_browser("csv")
             return True
         return super().on_touch_down(touch)
-    
+
     def on_touch_up(self, touch):
         """reset visual state on touch release"""
         if self.collide_point(*touch.pos):
             self._set_hover_state(False)
         return super().on_touch_up(touch)
-    
+
     def _set_hover_state(self, hovered):
         """update visual appearance for hover/press state"""
         self.is_hovered = hovered
-        self.canvas.before.clear()
-        with self.canvas.before:
-            Color(*StyledButton.hex2rgba("#FFFFFF", 1))  # white base background
-            self._bg_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15])
-            if hovered:
-                Color(*StyledButton.hex2rgba(PACIFICA_BLUE, 0.7))  # darker blue when pressed
-            else:
-                Color(*StyledButton.hex2rgba(PACIFICA_BLUE, 0.4))  # normal blue
-            self._overlay_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15])
+        if self.is_uninstalled_state:
+            base_color = StyledButton.hex2rgba("#D9534F", 0.7)
+            hover_color = StyledButton.hex2rgba("#D9534F", 0.9)
+        else:
+            base_color = StyledButton.hex2rgba(PACIFICA_BLUE, 0.4)
+            hover_color = StyledButton.hex2rgba(PACIFICA_BLUE, 0.7)
+
+        if hovered:
+            self.overlay_color.rgba = hover_color
+        else:
+            self.overlay_color.rgba = base_color
 
 
 # --------------------------------------------------------------------------------------
@@ -777,6 +792,9 @@ class PacificaAgendaApp(App):
         # Set initial debug console visibility based on loaded config
         self._update_debug_console_visibility(self.CONF["debug"])
 
+        # Update home screen UI based on installation status
+        self._update_home_screen_ui()
+
         # bind drag-and-drop
         if platform in ("win", "linux", "macosx"):
             Window.bind(on_dropfile=self._on_file_drop)
@@ -839,8 +857,8 @@ class PacificaAgendaApp(App):
         root.add_widget(logo_header)
 
         # unified upload zone (replaces both drop area and browse button)
-        upload_zone = UploadZone(self)
-        root.add_widget(upload_zone)
+        self.upload_zone = UploadZone(self)
+        root.add_widget(self.upload_zone)
 
         nav_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=75, spacing=15)
         nav_bar.add_widget(Widget())
@@ -1242,7 +1260,7 @@ class PacificaAgendaApp(App):
 
         # Ignore Brackets row
         label_brackets = Label(
-            text="Ignore Brackets []",
+            text="Ignore Bracketed Text []",
             color=[0, 0, 0, 1],
             font_size=28,
             bold=True,
@@ -1256,10 +1274,10 @@ class PacificaAgendaApp(App):
             callback=self._toggle_ignore_brackets,
             size_hint=(None, None),
             width=320,
-            height=75
+            height=75,
+            text_on="Ignoring Brackets",
+            text_off="Not Ignoring Brackets"
         )
-        brackets_toggle_btn.text_on = "Ignoring Brackets"
-        brackets_toggle_btn.text_off = "Not Ignoring Brackets"
         control_brackets = BoxLayout(orientation="horizontal", spacing=10, size_hint_x=0.7)
         control_brackets.add_widget(brackets_toggle_btn)
         control_brackets.add_widget(Widget())
@@ -1276,7 +1294,7 @@ class PacificaAgendaApp(App):
         back_btn.bind(on_release=lambda *_: self._navigate_to("home"))
 
         uninstall_btn = StyledButton(
-            text="Uninstall",
+            text="Uninstall App",
             size_hint=(None, None),
             width=220,
             height=75,
@@ -1306,17 +1324,50 @@ class PacificaAgendaApp(App):
             self.model_status_lbl.text = f"Not Installed ({MODEL_FILENAME})"
             self.install_model_btn.text = "Install" # Ensure text is "Install" if not installed
             self.install_model_btn.disabled = False
+        self._update_home_screen_ui()
 
     def _install_model(self):
-        self.model_status_lbl.text = "Downloading... (may take a while)"
-        self.install_model_btn.disabled = True
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
         
-        # Start download in a thread
-        threading.Thread(
-            target=self.backend.download_model,
-            args=(self._on_model_download_complete, self._on_model_download_error),
-            daemon=True
-        ).start()
+        label = Label(
+            text=f"This will download the model ({MODEL_FILENAME}, ~4GB) to your user data directory:\n"
+                 f"{self.user_data_dir}\n\n"
+                 f"A 'models' folder will be created if it doesn't exist.\n"
+                 f"This may take a while depending on your internet connection.\n\n"
+                 f"[b]Do you want to proceed?[/b]",
+            markup=True,
+            halign='center'
+        )
+        content.add_widget(label)
+
+        btn_layout = BoxLayout(size_hint_y=None, height=75, spacing=10)
+        cancel_btn = StyledButton(text="Cancel")
+        confirm_btn = StyledButton(text="Download")
+        btn_layout.add_widget(cancel_btn)
+        btn_layout.add_widget(confirm_btn)
+        content.add_widget(btn_layout)
+
+        popup = Popup(title="Confirm Model Download", content=content, size_hint=(0.8, 0.6), auto_dismiss=False)
+
+        def on_confirm(*_):
+            popup.dismiss()
+            self.model_status_lbl.text = "Downloading... (may take a while)"
+            self.install_model_btn.disabled = True
+
+            # Start download in a thread
+            threading.Thread(
+                target=self.backend.download_model,
+                args=(self._on_model_download_complete, self._on_model_download_error),
+                daemon=True
+            ).start()
+
+        def on_cancel(*_):
+            popup.dismiss()
+
+        confirm_btn.bind(on_release=on_confirm)
+        cancel_btn.bind(on_release=on_cancel)
+
+        popup.open()
 
     @mainthread
     def _on_model_download_complete(self, model_path: str):
@@ -1448,6 +1499,11 @@ class PacificaAgendaApp(App):
             if os.path.exists(data_dir):
                 shutil.rmtree(data_dir)
 
+            # Reset model path in config
+            self.CONF["model_path"] = ""
+            self._save_conf()
+            self._update_model_status()
+
             # Show a final message before quitting
             final_msg_content = Label(
                 text="Application data has been removed.\n"
@@ -1466,6 +1522,11 @@ class PacificaAgendaApp(App):
 
         except Exception as e:
             self._show_error("Uninstall Error", f"Could not remove application data: {e}")
+
+    def _update_home_screen_ui(self):
+        model_path = self.CONF.get("model_path")
+        is_installed = model_path and os.path.exists(model_path)
+        self.upload_zone.set_uninstalled_state(not is_installed)
 
     # ---------------------------------------------------------------- Help & Credits
     def _build_help(self):

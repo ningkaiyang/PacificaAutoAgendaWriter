@@ -332,6 +332,7 @@ class AgendaBackend:
                 raise ValueError("user_data_dir not set in backend")
 
             models_dir = os.path.join(self.user_data_dir, "models")
+            os.makedirs(models_dir, exist_ok=True)
 
             print(f"[backend] Downloading model to: {models_dir}")
 
