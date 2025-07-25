@@ -24,6 +24,7 @@ import subprocess
 import sys
 import threading
 import traceback
+import re
 from datetime import datetime
 from typing import List, Callable
 
@@ -983,6 +984,9 @@ class PacificaAgendaApp(App):
             include_flag = str(row.get("Include in Summary for Mayor", "")).upper() == "Y"
 
             # Extract individual column data
+            # Get the ignore_brackets setting
+            ignore_brackets = self.CONF.get("ignore_brackets", False)
+
             date_text = str(row.get("MEETING DATE", "")).strip()
             section_text = str(row.get("AGENDA SECTION", "")).replace("\n", " ").replace("•", "-").strip()
             if section_text == "nan":
@@ -995,6 +999,13 @@ class PacificaAgendaApp(App):
                 n = str(row["NOTES"]).replace("\n", " ").replace("•", "-").strip()
                 if n and n.lower() != "nan":
                     notes_text = n
+            
+            # Conditionally strip brackets if setting is enabled
+            if ignore_brackets:
+                date_text = re.sub(r'\[.*?\]', '', date_text).strip()
+                section_text = re.sub(r'\[.*?\]', '', section_text).strip()
+                item_text = re.sub(r'\[.*?\]', '', item_text).strip()
+                notes_text = re.sub(r'\[.*?\]', '', notes_text).strip()
 
             # Instantiate AgendaItem with individual column data
             widget = AgendaItem(date_text, section_text, item_text, notes_text, idx, self)
