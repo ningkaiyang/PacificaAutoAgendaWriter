@@ -622,6 +622,7 @@ class PacificaAgendaApp(App):
 
     debug_console: TextInput | None = None
     sv_debug: ScrollView | None = None
+    sv_gen_output: ScrollView | None = None
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -956,13 +957,18 @@ class PacificaAgendaApp(App):
         # scrollable log textbox
         self.gen_output = TextInput(
             readonly=True,
-            font_size=16,  # increased font size
+            font_size=16,
             foreground_color=[0, 0, 0, 1],
             background_color=[1, 1, 1, 1],
+            size_hint_y=None,  # CRITICAL for use in ScrollView
         )
-        sv = ScrollView()
-        sv.add_widget(self.gen_output)
-        layout.add_widget(sv)
+        # This binding makes the TextInput grow with its content
+        self.gen_output.bind(minimum_height=self.gen_output.setter('height'))
+
+        # Store the ScrollView instance to control scrolling later
+        self.sv_gen_output = ScrollView(scroll_wheel_distance=50)
+        self.sv_gen_output.add_widget(self.gen_output)
+        layout.add_widget(self.sv_gen_output)
 
         # Optional debug console under generation output if enabled
         if self.CONF["debug"]:
@@ -1401,8 +1407,22 @@ class PacificaAgendaApp(App):
 
     @mainthread
     def _append_gen_text(self, txt: str):
+        """Appends text to the main generation output with smart scrolling."""
+        if not self.sv_gen_output:
+            self.gen_output.text += txt
+            return
+
+        # Smart scrolling: only auto-scroll if user is at the bottom
+        # A small tolerance is used for floating point inaccuracies.
+        is_at_bottom = self.sv_gen_output.scroll_y <= 0.01
+
         self.gen_output.text += txt
-        self.gen_output.cursor = (0, len(self.gen_output.text))
+
+        if is_at_bottom:
+            # Schedule scroll to bottom after text is added and UI updated.
+            # Using -1 schedules it for the next frame.
+            from kivy.clock import Clock
+            Clock.schedule_once(lambda dt: setattr(self.sv_gen_output, 'scroll_y', 0), -1)
 
     def _done_cb(self, full_text: str, dates: List[str]):
         if self.generation_cancel_event.is_set():
@@ -1419,10 +1439,17 @@ class PacificaAgendaApp(App):
     @mainthread
     def _update_debug_console(self, text: str):
         """Callback to append text to the debug console from a worker thread."""
-        if self.debug_console and self.sv_debug:
-            self.debug_console.text += text
-            # Scroll the parent ScrollView to the bottom to show the latest text
-            self.sv_debug.scroll_y = 0
+        if not (self.debug_console and self.sv_debug):
+            return
+
+        # Smart scrolling: only auto-scroll if user is at the bottom
+        is_at_bottom = self.sv_debug.scroll_y <= 0.01
+
+        self.debug_console.text += text
+
+        if is_at_bottom:
+            from kivy.clock import Clock
+            Clock.schedule_once(lambda dt: setattr(self.sv_debug, 'scroll_y', 0), -1)
 
     # ---------------------------------------------------------------- Save document
     def _save_report(self):

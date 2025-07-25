@@ -493,6 +493,9 @@ class AgendaBackend:
                             print("\n[backend] Generation cancelled by user.")
                         return
                     token = chunk["choices"][0]["delta"].get("content", "")
+                    # Stream raw Pass 1 output (including <think> tags) to GUI
+                    if token and token_cb:
+                        token_cb(token)
                     raw_summary += token
                     think_streamer(chunk)  # count tokens and print for debug
                 think_streamer.done()
@@ -525,7 +528,7 @@ class AgendaBackend:
                 )
 
                 # This is the stream we will show to the user
-                # Stream to console (unfiltered) and GUI (filtered)
+                # Stream to console (unfiltered) and GUI (raw)
                 streamer = TokenStreamer(debug_callback=debug_cb)
                 
                 for chunk in pass2_stream:
@@ -538,13 +541,15 @@ class AgendaBackend:
                     # Console output (unfiltered for debugging)
                     streamer(chunk)
                     
-                    # GUI output (filtered)
                     tok = chunk["choices"][0]["delta"].get("content", "")
                     if tok:
-                        # Filter token for GUI display
+                        # Stream raw token to GUI to show full process
+                        if token_cb:
+                            token_cb(tok)
+
+                        # Filter token to build the clean report for saving
                         cleaned = gui_filter.filter_token(tok)
-                        if cleaned and token_cb:
-                            token_cb(cleaned)
+                        if cleaned:
                             full_output += cleaned
                             
                 streamer.done()
