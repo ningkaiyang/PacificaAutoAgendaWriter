@@ -61,28 +61,40 @@ def suppress_stderr():
 class TokenStreamer:
     """Collects streamed tokens, prints all tokens (including thinking tags) for debugging,
     and tracks speed."""
-    def __init__(self):
+    def __init__(self, debug_callback: Callable[[str], None] | None = None):
         self._start = time.perf_counter()
         self._tok = 0
-        
+        self.debug_callback = debug_callback
+
     def __call__(self, chunk: dict):
         tok = chunk["choices"][0]["delta"].get("content", "")
         if not tok:
             return
         self._tok += 1
         # Print everything to console for debugging
-        print(tok, end="", flush=True)
-        
+        if self.debug_callback:
+            self.debug_callback(tok)
+        else:
+            print(tok, end="", flush=True)
+
     def done(self):
         dt = time.perf_counter() - self._start
         if dt:
-            print(f"\nAverage speed: {self._tok/dt:.2f} tok/s")
-            print(f"Tokens: {self._tok}")
-            print(f"Elapsed Time: {dt:.2f}s")
+            stats = []
+            stats.append(f"\nAverage speed: {self._tok/dt:.2f} tok/s")
+            stats.append(f"Tokens: {self._tok}")
+            stats.append(f"Elapsed Time: {dt:.2f}s")
             # memory usage on macOS is in bytes, so i'll convert to MB
             if resource:
                 mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 / 1024
-                print(f"Peak Memory Usage: {mem_mb:.2f} MB")
+                stats.append(f"Peak Memory Usage: {mem_mb:.2f} MB")
+            
+            stats_str = "\n".join(stats)
+            
+            if self.debug_callback:
+                self.debug_callback(stats_str + "\n")
+            else:
+                print(stats_str)
 
 
 class GUITokenFilter:
@@ -250,8 +262,8 @@ class AgendaBackend:
         self.user_data_dir = user_data_dir
         self.model_path = model_path
         self.llm_model: Llama | None = None
-        if self.model_path and os.path.exists(self.model_path):
-            self._load_llm_model_async()  # Non-blocking
+        # if self.model_path and os.path.exists(self.model_path):
+        #     self._load_llm_model_async()  # Non-blocking
 
     # ------------------------------------------------------------------ CSV helpers
     @staticmethod
@@ -362,6 +374,7 @@ class AgendaBackend:
         cancel_event: threading.Event | None = None,
         prompt_template_pass1: str | None = None,
         prompt_template_pass2: str | None = None,
+        debug_callback: Callable[[str], None] | None = None,
     ):
         """
         Two-pass streaming generation.
@@ -386,6 +399,7 @@ class AgendaBackend:
                 cancel_event,
                 prompt_template_pass1,
                 prompt_template_pass2,
+                debug_callback,
             ),
             daemon=True,
         )
@@ -401,6 +415,7 @@ class AgendaBackend:
         cancel_event: threading.Event | None = None,
         prompt_template_pass1: str | None = None,
         prompt_template_pass2: str | None = None,
+        debug_cb: Callable[[str], None] | None = None,
     ):
         gui_filter = GUITokenFilter()
 
@@ -419,7 +434,10 @@ class AgendaBackend:
 
             for md in ordered_dates:
                 if cancel_event and cancel_event.is_set():
-                    print("\n[backend] Generation cancelled by user.")
+                    if debug_cb:
+                        debug_cb("\n[backend] Generation cancelled by user.\n")
+                    else:
+                        print("\n[backend] Generation cancelled by user.")
                     return
                 items = grouped[md]
                 items.sort(key=lambda x: str(x.get("AGENDA SECTION", "")))
@@ -447,7 +465,14 @@ class AgendaBackend:
                     md=md, items_text=items_text.strip()
                 )
                 
-                print("\n--- PASS 1: SUMMARIZATION ---")
+                if debug_cb:
+                    debug_cb("\n" + "="*20 + " PASS 1: SUMMARIZATION " + "="*20 + "\n")
+                    debug_cb("--- PROMPT INPUT ---\n")
+                    debug_cb(summarization_prompt)
+                    debug_cb("\n\n--- LLM OUTPUT ---\n")
+                else:
+                    print("\n--- PASS 1: SUMMARIZATION ---")
+                
                 pass1_stream = self.llm_model.create_chat_completion(
                     messages=[{"role": "user", "content": summarization_prompt}],
                     max_tokens=10_000,
@@ -458,11 +483,14 @@ class AgendaBackend:
                 )
                 
                 # Collect summarized items from Pass 1
-                think_streamer = TokenStreamer()
+                think_streamer = TokenStreamer(debug_callback=debug_cb)
                 raw_summary = ""
                 for chunk in pass1_stream:
                     if cancel_event and cancel_event.is_set():
-                        print("\n[backend] Generation cancelled by user.")
+                        if debug_cb:
+                            debug_cb("\n[backend] Generation cancelled by user.\n")
+                        else:
+                            print("\n[backend] Generation cancelled by user.")
                         return
                     token = chunk["choices"][0]["delta"].get("content", "")
                     raw_summary += token
@@ -474,15 +502,19 @@ class AgendaBackend:
                 clean_summary = self._extract_clean_summary(raw_summary)
 
                 # ------------ PASS 2 – final formatting
-                # use the main prompt template for the final formatting pass
-                # we replace the original items_text with the summarized ones from pass 1
-                # and add a /no_think instruction to prevent the model from re-summarizing
                 template_pass2 = prompt_template_pass2 or PROMPT_TEMPLATE_PASS2
                 format_prompt = template_pass2.format(
                     meeting_date=md, items_text=clean_summary.strip()
                 ) + " /no_think"
 
-                print("\n--- PASS 2: FORMATTING ---")
+                if debug_cb:
+                    debug_cb("\n" + "="*20 + " PASS 2: FORMATTING " + "="*20 + "\n")
+                    debug_cb("--- PROMPT INPUT ---\n")
+                    debug_cb(format_prompt)
+                    debug_cb("\n\n--- LLM OUTPUT ---\n")
+                else:
+                    print("\n--- PASS 2: FORMATTING ---")
+                
                 pass2_stream = self.llm_model.create_chat_completion(
                     messages=[{"role": "user", "content": format_prompt}],
                     max_tokens=10_000,
@@ -494,11 +526,14 @@ class AgendaBackend:
 
                 # This is the stream we will show to the user
                 # Stream to console (unfiltered) and GUI (filtered)
-                streamer = TokenStreamer()
+                streamer = TokenStreamer(debug_callback=debug_cb)
                 
                 for chunk in pass2_stream:
                     if cancel_event and cancel_event.is_set():
-                        print("\n[backend] Generation cancelled by user.")
+                        if debug_cb:
+                            debug_cb("\n[backend] Generation cancelled by user.\n")
+                        else:
+                            print("\n[backend] Generation cancelled by user.")
                         return
                     # Console output (unfiltered for debugging)
                     streamer(chunk)
@@ -519,9 +554,11 @@ class AgendaBackend:
                     token_cb("\n\n")
                 full_output += "\n\n"
 
-            streamer.done()
             if cancel_event and cancel_event.is_set():
-                print("\n[backend] Generation cancelled by user.")
+                if debug_cb:
+                    debug_cb("\n[backend] Generation cancelled by user.\n")
+                else:
+                    print("\n[backend] Generation cancelled by user.")
                 return
             if done_cb:
                 done_cb(full_output, ordered_dates)

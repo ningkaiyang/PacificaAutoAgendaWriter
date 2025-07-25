@@ -621,6 +621,7 @@ class PacificaAgendaApp(App):
     prompt_pass2: str = ""
 
     debug_console: TextInput | None = None
+    sv_debug: ScrollView | None = None
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -965,31 +966,37 @@ class PacificaAgendaApp(App):
 
         # Optional debug console under generation output if enabled
         if self.CONF["debug"]:
+            debug_container = BoxLayout(orientation='vertical', size_hint_y=0.6, spacing=5)
+            
+            debug_title = Label(
+                text="[b]Debug Console[/b]",
+                markup=True,
+                size_hint_y=None,
+                height=30,
+                color=TEXT_COLOR,
+                font_size=20
+            )
+            debug_container.add_widget(debug_title)
+
             self.debug_console = TextInput(
-            readonly=True,
-            size_hint_y=0.4,
-            font_name="Courier" if platform != "ios" else None,
-            background_color=[0.1, 0.1, 0.1, 1],
-            foreground_color=[1, 1, 1, 1],
-        )
-            layout.add_widget(self.debug_console)
-            # redirect stdout/stderr
-            sys.stdout = self
-            sys.stderr = self
+                readonly=True,
+                size_hint_y=None,  # Critical for use inside a ScrollView
+                # Do not set a font_name; let Kivy use its default to avoid font-not-found crashes.
+                background_color=[0.1, 0.1, 0.1, 1],
+                foreground_color=[0.8, 1.0, 0.8, 1], # Green text on black
+                font_size=14
+            )
+            # This binding makes the TextInput grow vertically to fit its content
+            self.debug_console.bind(minimum_height=self.debug_console.setter('height'))
+
+            self.sv_debug = ScrollView(scroll_wheel_distance=50)
+            self.sv_debug.add_widget(self.debug_console)
+            debug_container.add_widget(self.sv_debug)
+
+            layout.add_widget(debug_container)
 
         self.screen_manager.add_widget(scr)
 
-    # file-like for debug console
-    def write(self, msg):
-        if self.debug_console:
-            @mainthread
-            def _append():
-                self.debug_console.text += msg
-                self.debug_console.cursor = (0, len(self.debug_console.text))
-            _append()
-
-    def flush(self):
-        pass  # needed for IOBase compliance
 
     # ---------------------------------------------------------------- Settings
     def _build_settings(self):
@@ -1355,9 +1362,16 @@ class PacificaAgendaApp(App):
             return
         rows = [self.filtered_items[i] for i in sorted(self.selected_indices)]
         self.gen_output.text = "Generating...\n"
+        if self.debug_console:
+            self.debug_console.text = ""
+
         self.save_button.disabled = True
         self.generation_cancel_event.clear()
         self._navigate_to("generation")
+
+        debug_cb = None
+        if self.CONF["debug"]:
+            debug_cb = self._update_debug_console
 
         # start backend thread
         try:
@@ -1369,6 +1383,7 @@ class PacificaAgendaApp(App):
                 cancel_event=self.generation_cancel_event,
                 prompt_template_pass1=self.prompt_pass1,
                 prompt_template_pass2=self.prompt_pass2,
+                debug_callback=debug_cb,
             )
         except RuntimeError as exc:
             self._show_error("Model Error", str(exc))
@@ -1400,6 +1415,14 @@ class PacificaAgendaApp(App):
     def _err_cb(self, exc: Exception):
         self._show_error("Generation Error", str(exc))
         self.screen_manager.current = "review"
+
+    @mainthread
+    def _update_debug_console(self, text: str):
+        """Callback to append text to the debug console from a worker thread."""
+        if self.debug_console and self.sv_debug:
+            self.debug_console.text += text
+            # Scroll the parent ScrollView to the bottom to show the latest text
+            self.sv_debug.scroll_y = 0
 
     # ---------------------------------------------------------------- Save document
     def _save_report(self):

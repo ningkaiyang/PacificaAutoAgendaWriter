@@ -31,7 +31,7 @@ This application is currently at **Version 2.0 (Kivy Edition)**. It represents a
 *   **Help Tab Improvements:** Plans are underway to enhance the help tab with more detailed instructions, comprehensive troubleshooting tips, and additional resources.
 *   **Ignoring Certain Statements:** Implement logic to parse and ignore any text enclosed within square brackets `[]` before sending the content to the LLM.
 *   **Settings Menu: Debug Mode:** Create a settings menu and utilize an appdata folder to allow for toggling a Debug Mode. When enabled, a terminal window should appear, displaying the internal thoughts generated during PASS 1 and PASS 2, along with input values, token speeds, and memory usage, to aid in troubleshooting and debugging across different operating systems.
-*   **Settings Menu: Uninstall App:** Implement a feature within the settings menu to cleanly remove all application files, including the downloaded model and any stored JSON settings.
+*   **Settings Menu: Uninstall App:** Implement a feature within the settings menu to cleanly remove all cached application files, such as the downloaded model and any stored JSON settings. Once that is done, the user can be prompted to delete the current actual runtime app by dragging and dropping the app to the trash can.
 
 ## Technical Stack
 *   **GUI:** `Kivy`
