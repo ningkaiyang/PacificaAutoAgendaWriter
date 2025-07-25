@@ -1,5 +1,5 @@
 """kivyfrontend.py
-City of Pacifica – Agenda Summary Generator (Kivy edition)
+City of Pacifica - Agenda Summary Generator (Kivy edition)
  
 Dependencies:
     pip install kivy pandas python-docx llama-cpp-python
@@ -25,7 +25,7 @@ import sys
 import threading
 import traceback
 from datetime import datetime
-from typing import List
+from typing import List, Callable
 
 import pandas as pd
 from kivy import platform  # type: ignore
