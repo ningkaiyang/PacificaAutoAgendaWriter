@@ -1432,7 +1432,13 @@ class PacificaAgendaApp(App):
 
     @mainthread
     def _on_model_download_error(self, exc: Exception):
-        self._show_error("Model Download Failed", traceback.format_exc())
+        error_message = (
+            "[b]Model download failed.[/b]\n\n"
+            "This may be due to an issue with your internet connection, a firewall, or a temporary problem with the model provider.\n\n"
+            "Please check your connection and try again. If the problem persists, contact IT support.\n\n"
+            f"[size=14]Details: {str(exc)}[/size]"
+        )
+        self._show_error("Model Download Failed", error_message, markup=True)
         self._update_model_status()
 
     def _toggle_debug(self, value: bool):
@@ -1698,7 +1704,8 @@ class PacificaAgendaApp(App):
             f"  - \"[b]{self.csv_headers['section']}[/b]\" for the Agenda Section\n"
             f"  - \"[b]{self.csv_headers['item']}[/b]\" for the Item Name\n"
             f"  - \"[b]{self.csv_headers['notes']}[/b]\" for the Item Notes\n"
-            f"  - \"[b]{self.csv_headers['include']}[/b]\" for auto-selection (must be 'Y')\n\n"
+            f"  - \"[b]{self.csv_headers['include']}[/b]\" for auto-selection (must be 'Y')\n"
+            "• [b]IMPORTANT[/b]: The meeting date column must start with a number (e.g., '01-Jan' or '1/1/2024') for the app to correctly identify agenda items.\n\n"
             "[size=30][b]Step 2: Upload Your File[/b][/size]\n"
             "• Click the large upload area on the home screen or\n"
             "• Drag and drop your CSV file directly onto the upload zone\n\n"
@@ -1926,6 +1933,7 @@ class PacificaAgendaApp(App):
         self.meeting_dates_for_report = dates
         self.save_button.disabled = False
         self._append_gen_text("\n--- DONE ---\n")
+        self._show_info("Generation Complete. You can now save the report.")
 
     def _err_cb(self, exc: Exception):
         self._show_error("Generation Error", str(exc))
@@ -2056,12 +2064,18 @@ class PacificaAgendaApp(App):
 
     # ---------------------------------------------------------------- Alerts
     @mainthread
-    def _show_error(self, title, msg):
-        Popup(title=title, content=Label(text=msg), size_hint=(0.6, 0.4)).open()
+    def _show_error(self, title, msg, markup=False):
+        content = Label(text=msg, markup=markup, halign="center")
+        popup = Popup(title=title, content=content, size_hint=(0.8, 0.5))
+        content.bind(width=lambda *x: content.setter('text_size')(content, (content.width, None)))
+        popup.open()
 
     @mainthread
     def _show_info(self, msg):
-        Popup(title="Info", content=Label(text=msg), size_hint=(0.6, 0.3)).open()
+        content = Label(text=msg, halign="center")
+        popup = Popup(title="Info", content=content, size_hint=(0.6, 0.4))
+        content.bind(width=lambda *x: content.setter('text_size')(content, (content.width, None)))
+        popup.open()
 
 
 # --------------------------------------------------------------------------------------
