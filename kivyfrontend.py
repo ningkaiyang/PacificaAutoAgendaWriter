@@ -33,6 +33,23 @@ from kivy import platform  # type: ignore
 from kivy.app import App
 from kivy.clock import mainthread
 from kivy.core.window import Window
+from kivy.core.audio import SoundLoader
+
+# More robust notification setup
+notification = None
+try:
+    # On macOS, plyer requires pyobjus. Check for it explicitly.
+    if platform == 'macosx':
+        import pyobjus  # This will raise ImportError if not installed
+    from plyer import notification
+except ImportError:
+    if platform == 'macosx':
+        print("Warning: 'pyobjus' or 'plyer' not found. System notifications on macOS will be disabled.", file=sys.stderr)
+        print("To enable them, run: pip install 'plyer[mac_os_notification]'", file=sys.stderr)
+    else:
+        print("Warning: 'plyer' not found. System notifications will be disabled.", file=sys.stderr)
+        print("To enable them, run: pip install plyer", file=sys.stderr)
+
 from kivy.graphics import Color, Rectangle, RoundedRectangle
 from kivy.properties import BooleanProperty, ListProperty, ObjectProperty, StringProperty
 from kivy.uix.widget import Widget
@@ -1007,7 +1024,7 @@ class PacificaAgendaApp(App):
         layout.add_widget(header_container)
         header_container.add_widget(header_labels_container)
 
-        scroll = ScrollView(size_hint=(1, 1), scroll_distance=100, scroll_wheel_distance=100) # Increased scroll speed
+        scroll = ScrollView(size_hint=(1, 1), scroll_distance=100, scroll_wheel_distance=150) # Increased scroll speed
         self.items_container = BoxLayout(orientation='vertical', size_hint_y=None, spacing=2)
         self.items_container.bind(minimum_height=self.items_container.setter('height'))
         scroll.add_widget(self.items_container)
@@ -1939,6 +1956,7 @@ class PacificaAgendaApp(App):
             from kivy.clock import Clock
             Clock.schedule_once(scroll_if_needed, -1)
 
+    @mainthread
     def _done_cb(self, full_text: str, dates: List[str]):
         if self.generation_cancel_event.is_set():
             return
@@ -1946,7 +1964,10 @@ class PacificaAgendaApp(App):
         self.meeting_dates_for_report = dates
         self.save_button.disabled = False
         self._append_gen_text("\n--- DONE ---\n")
-        self._show_info("Generation Complete. You can now save the report.")
+        if Window.focus:
+            self._show_info("Generation Complete. You can now save the report.")
+        else:
+            self._send_completion_notification()
 
     def _err_cb(self, exc: Exception):
         self._show_error("Generation Error", str(exc))
@@ -1983,6 +2004,50 @@ class PacificaAgendaApp(App):
 
             from kivy.clock import Clock
             Clock.schedule_once(scroll_if_needed, -1)
+
+    def _send_completion_notification(self):
+        """Send a system notification when generation is done and app is not focused."""
+        # 1. Raise window to grab attention (flashing icon). This is now safe
+        # because this method is called from _done_cb, which is on the main thread.
+        # We still wrap it in a try-except as a defensive measure.
+        try:
+            Window.raise_window()
+        except Exception:
+            pass  # Silently fail if OS blocks this
+
+        # 2. Play a sound if available
+        try:
+            # NOTE: Requires 'notification.wav' or 'notification.mp3' in the root directory.
+            sound = SoundLoader.load('notification.wav')
+            if not sound:
+                sound = SoundLoader.load('notification.mp3')  # Fallback to mp3
+            
+            if sound:
+                sound.play()
+        except Exception as e:
+            print(f"Could not play notification sound: {e}", file=sys.stderr)
+
+        # 3. Send a system notification if plyer and its dependencies are installed
+        if notification:
+            try:
+                # .ico for Windows, .png for macOS/Linux (plyer handles this)
+                icon_path = ""
+                if platform == "win" and os.path.exists("logo.ico"):
+                    icon_path = "logo.ico"
+                elif os.path.exists("logo.png"):
+                    icon_path = "logo.png"
+                
+                notification.notify(
+                    title="Generation Complete",
+                    message="The agenda summary report is ready to be saved.",
+                    app_name="Pacifica Agenda Generator",
+                    app_icon=icon_path,
+                    timeout=10,  # Display notification for 10 seconds
+                )
+            except Exception as e:
+                # Catching errors here is important for issues that occur at runtime
+                # even if dependencies are installed (e.g., D-Bus issues on Linux).
+                print(f"Error sending plyer notification: {e}", file=sys.stderr)
 
     # ---------------------------------------------------------------- Save document
     def _save_report(self):
