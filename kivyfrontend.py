@@ -126,6 +126,11 @@ def native_open_file_dialog(title="Select File", file_types=None, multiple=False
                 posix_path = result.stdout.strip()
                 print(f"native open dialog returned: {posix_path}")  # debug
                 return [posix_path]
+            
+            if result.returncode == 1:
+                # User cancelled the dialog. Return an empty list to signify this.
+                print("Native open dialog cancelled by user.")
+                return []
                 
         except Exception as e:
             print(f"native file dialog error: {e}")
@@ -158,6 +163,11 @@ def native_save_file_dialog(title="Save File", filename="", file_types=None):
                 posix_path = result.stdout.strip()
                 print(f"native save dialog returned: {posix_path}")  # debug
                 return posix_path
+            
+            if result.returncode == 1:
+                # User cancelled the dialog. Return an empty string to signify this.
+                print("Native save dialog cancelled by user.")
+                return ""
                 
         except Exception as e:
             print(f"native save dialog error: {e}")
@@ -910,9 +920,12 @@ class PacificaAgendaApp(App):
             title = "Select File"
         
         selection = native_open_file_dialog(title=title, file_types=filters)
-        if selection:
-            self._process_csv(selection[0])
-            return
+        # If native dialog was used, selection will be a list (empty on cancel).
+        # If native dialog is not supported/failed, it will be None.
+        if selection is not None:
+            if selection:  # If list is not empty (file was selected)
+                self._process_csv(selection[0])
+            return  # Return here to prevent Kivy fallback
         
         # fallback to kivy file chooser
         chooser = FileChooserListView(filters=["*.csv"] if filetype == "csv" else None, path=os.getcwd())
@@ -1705,7 +1718,7 @@ class PacificaAgendaApp(App):
             f"  - \"[b]{self.csv_headers['item']}[/b]\" for the Item Name\n"
             f"  - \"[b]{self.csv_headers['notes']}[/b]\" for the Item Notes\n"
             f"  - \"[b]{self.csv_headers['include']}[/b]\" for auto-selection (must be 'Y')\n"
-            "• [b]IMPORTANT[/b]: The meeting date column must start with a number (e.g., '01-Jan' or '1/1/2024') for the app to correctly identify agenda items.\n\n"
+            "• [b]IMPORTANT[/b]: The meeting date column must start with a number (e.g., '01-Jan' or '1/1/2024') and other columns should not, for the app to correctly identify agenda items.\n\n"
             "[size=30][b]Step 2: Upload Your File[/b][/size]\n"
             "• Click the large upload area on the home screen or\n"
             "• Drag and drop your CSV file directly onto the upload zone\n\n"
@@ -1988,18 +2001,20 @@ class PacificaAgendaApp(App):
             file_types=filters
         )
         
-        if save_path:
-            # ensure .docx extension
-            if not save_path.lower().endswith(".docx"):
-                save_path += ".docx"
-            
-            try:
-                doc.save(save_path)
-                self._show_info(f"saved to {save_path}")
-                return
-            except Exception as exc:
-                self._show_error("save error", str(exc))
-                return
+        if save_path is not None:
+            # Native dialog was used. If save_path is not empty, a file was chosen.
+            # If it's an empty string, user cancelled.
+            if save_path:
+                # ensure .docx extension
+                if not save_path.lower().endswith(".docx"):
+                    save_path += ".docx"
+                
+                try:
+                    doc.save(save_path)
+                    self._show_info(f"saved to {save_path}")
+                except Exception as exc:
+                    self._show_error("save error", str(exc))
+            return # Return here to prevent Kivy fallback
         
         # fallback to kivy file chooser with proper save functionality
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)

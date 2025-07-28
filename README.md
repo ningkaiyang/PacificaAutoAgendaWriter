@@ -30,9 +30,7 @@ This application is currently at **Version 2.0 (Kivy Edition)**. It represents a
 ## TBD (Future Development)
 *   **Video Demonstration:** A link to a video demonstration is planned to be added to the help tab in the future.
 *   **Help Tab Improvements:** Plans are underway to enhance the help tab with more detailed instructions, comprehensive troubleshooting tips, and additional resources.
-*   **Specify Meeting Date Required Format (start with number):** Specify in the instructions/help tab that meeting date must be 99-XYZ format, since items are discovered by filtering MEETING DATE by numbers.
 *   **Done Notification:** When finished with generation, app outputs a notification and maybe a sound or something to notify user, so it can be left running generating in the background and will still display some kind of thing that will tell user it is finished, anything works, preferably visual not audio though.
-*   **Fail Message for Model Install:** In case huggingface ever goes down - maybe my contact info or something: Error message like - check Wifi connection/firewall, or contact IT support. 
 
 ## Technical Stack
 *   **GUI:** `Kivy`
