@@ -9,7 +9,8 @@ This application is designed to significantly streamline the process of creating
 *   **Automated Formatting:** Automatically generates a professionally formatted `.docx` report. This includes the application of appropriate headers, structured sections, and consistent styling to ensure readability and a polished appearance.
 *   **Cross-Platform GUI:** Developed using the Kivy framework, providing a consistent and responsive graphical user interface experience across major operating systems, including Windows, macOS, and Linux.
 *   **User-Friendly Interface:** Features an intuitive interface designed for ease of use. Key elements include drag-and-drop functionality for uploading CSV files, a clear mechanism for reviewing and selecting specific agenda items to include in the summary, and real-time progress indicators during the generation process.
-*   **Configurable:** Allows users to customize the application's behavior through a dedicated settings menu. This includes the ability to select to inspect outputs and install the LLM model or define custom prompt templates to guide the summarization process, or perform a clean uninstall to remove the entire file!
+*   **Configurable:** Allows users to customize the application's behavior through a dedicated settings menu. This includes the ability to select to inspect outputs, install the LLM model, define custom prompt templates, or perform a clean uninstall.
+*   **Modifiable Headers:** The names of the CSV columns ("MEETING DATE", "AGENDA SECTION", etc.) can be customized in the settings menu to match your specific file format. These settings are saved and loaded automatically.
 
 ## How to Use
 1.  **Launch App:** Execute the application by running the Python script: `python3 kivyfrontend.py`.
@@ -29,10 +30,9 @@ This application is currently at **Version 2.0 (Kivy Edition)**. It represents a
 ## TBD (Future Development)
 *   **Video Demonstration:** A link to a video demonstration is planned to be added to the help tab in the future.
 *   **Help Tab Improvements:** Plans are underway to enhance the help tab with more detailed instructions, comprehensive troubleshooting tips, and additional resources.
-*   **Modifiable Headers:** Flexible CSV scanning, maybe.
-*   **Specify Meeting Date Required Format (start with number):** Meeting date must be 99-XYZ format, since items are discovered by filtering MEETING DATE by numbers.
-*   **Done Notification:** When finished with generation, app outputs a notification and maybe a sound or something to notify user, so it can be left running generating in the background.
-*   **Fail Message for Model Install:** In case huggingface ever goes down - maybe my contact or something
+*   **Specify Meeting Date Required Format (start with number):** Specify in the insturctions/help tab that meeting date must be 99-XYZ format, since items are discovered by filtering MEETING DATE by numbers.
+*   **Done Notification:** When finished with generation, app outputs a notification and maybe a sound or something to notify user, so it can be left running generating in the background and will still display some kind of thing that will tell user it is finished, anything works, preferably visual not audio though.
+*   **Fail Message for Model Install:** In case huggingface ever goes down - maybe my contact info or something: Error message like - check Wifi connection/firewall, or contact IT support. 
 
 ## Technical Stack
 *   **GUI:** `Kivy`

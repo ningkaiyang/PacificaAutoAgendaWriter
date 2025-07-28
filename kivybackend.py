@@ -137,14 +137,6 @@ class GUITokenFilter:
 # --------------------------------------------------------------------------------------
 # Constant definitions (copied from original file)
 # --------------------------------------------------------------------------------------
-REQUIRED_HEADERS: List[str] = [
-    "MEETING DATE",
-    "AGENDA SECTION",
-    "AGENDA ITEM",
-    "NOTES",
-    "Include in Summary for Mayor",
-]
-
 PROMPT_TEMPLATE_PASS1 = """You are an expert city clerk. Your task is to summarize each agenda item into ONE short clause.
 
 THINK STEP BY STEP, ONCE PER ITEM AND NO MORE. ONCE YOU ARE DONE WITH EVERY ITEM IMMEDIATELY EXIT YOUR THINKING BLOCK AND OUTPUT THE SUMMARIZED LINES.
@@ -268,14 +260,14 @@ class AgendaBackend:
 
     # ------------------------------------------------------------------ CSV helpers
     @staticmethod
-    def _validate_headers(df: pd.DataFrame):
+    def _validate_headers(df: pd.DataFrame, required_headers: List[str]):
         """Check for required headers and raise ValueError if any are missing."""
-        missing_headers = [h for h in REQUIRED_HEADERS if h not in df.columns]
+        missing_headers = [h for h in required_headers if h not in df.columns]
         if missing_headers:
             missing_str = ", ".join(f"'{h}'" for h in missing_headers)
             raise ValueError(f"CSV file is missing required columns: {missing_str}")
 
-    def process_csv(self, filepath: str) -> tuple[pd.DataFrame, List[pd.Series]]:
+    def process_csv(self, filepath: str, csv_headers: dict) -> tuple[pd.DataFrame, List[pd.Series]]:
         """Read CSV, validate headers, filter rows → return (df, all_items)."""
         try:
             # Use the 'python' engine for more robust parsing of potentially
@@ -287,12 +279,12 @@ class AgendaBackend:
             # and other pandas parsing errors.
             raise ValueError(f"Failed to read or parse CSV file: {e}")
 
-        self._validate_headers(df)  # Will raise ValueError if invalid
+        self._validate_headers(df, list(csv_headers.values()))  # Will raise ValueError if invalid
 
         # only keep rows where MEETING DATE starts with a digit - actual agenda items
         all_items: List[pd.Series] = []
         for _, row in df.iterrows():
-            meeting_date = str(row.get("MEETING DATE", "")).strip()
+            meeting_date = str(row.get(csv_headers["date"], "")).strip()
             if meeting_date and meeting_date[0].isdigit():
                 all_items.append(row)
 
@@ -378,6 +370,7 @@ class AgendaBackend:
         prompt_template_pass2: str | None = None,
         debug_callback: Callable[[str], None] | None = None,
         ignore_brackets: bool = False,
+        csv_headers: dict | None = None,
     ):
         """
         Two-pass streaming generation.
@@ -404,6 +397,7 @@ class AgendaBackend:
                 prompt_template_pass2,
                 debug_callback,
                 ignore_brackets,
+                csv_headers,
             ),
             daemon=True,
         )
@@ -421,15 +415,26 @@ class AgendaBackend:
         prompt_template_pass2: str | None = None,
         debug_cb: Callable[[str], None] | None = None,
         ignore_brackets: bool = False,
+        csv_headers: dict | None = None,
     ):
         gui_filter = GUITokenFilter()
+
+        # Define default headers here as a fallback if None are passed
+        if csv_headers is None:
+            csv_headers = {
+                "date": "MEETING DATE",
+                "section": "AGENDA SECTION",
+                "item": "AGENDA ITEM",
+                "notes": "NOTES",
+                "include": "Include in Summary for Mayor",
+            }
 
         try:
             # Group rows by date, preserving original order
             grouped: dict[str, List[pd.Series]] = {}
             ordered_dates: List[str] = []
             for r in rows:
-                date = str(r["MEETING DATE"])
+                date = str(r[csv_headers["date"]])
                 if date not in grouped:
                     grouped[date] = []
                     ordered_dates.append(date)
@@ -445,21 +450,21 @@ class AgendaBackend:
                         print("\n[backend] Generation cancelled by user.")
                     return
                 items = grouped[md]
-                items.sort(key=lambda x: str(x.get("AGENDA SECTION", "")))
+                items.sort(key=lambda x: str(x.get(csv_headers["section"], "")))
 
                 # Build items text for summarisation pass
                 items_text = ""
                 for it in items:
                     # Pull section, 'placeholder' if none
-                    sec = str(it.get("AGENDA SECTION", "N/A")).replace("\n", " ").replace("•", "-").strip()
+                    sec = str(it.get(csv_headers["section"], "N/A")).replace("\n", " ").replace("•", "-").strip()
                     if sec == "nan" or sec == "":
                         sec = "placeholder"
                     # Pull title, 'unnamed item' if none
-                    title = str(it.get("AGENDA ITEM", "N/A")).replace("\n", " ").replace("•", "-").strip()
+                    title = str(it.get(csv_headers["item"], "N/A")).replace("\n", " ").replace("•", "-").strip()
                     if title == "nan" or title == "":
                         title = "unnamed item"
                     # Pull notes, does not get added at all to entry if none.
-                    notes_val = it.get("NOTES")
+                    notes_val = it.get(csv_headers["notes"])
                     notes = str(notes_val).replace("\n", " ").replace("•", "-").strip()
                     # If ignore brackets, strip from each item only, not across entries.
                     if ignore_brackets:

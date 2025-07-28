@@ -64,6 +64,14 @@ PACIFICA_BLUE = "#4682B4"  # headers / accents
 PACIFICA_SAND = "#F5F5DC"  # background
 TEXT_COLOR = "#222222"
 
+DEFAULT_CSV_HEADERS = {
+    "date": "MEETING DATE",
+    "section": "AGENDA SECTION",
+    "item": "AGENDA ITEM",
+    "notes": "NOTES",
+    "include": "Include in Summary for Mayor",
+}
+
 # Column sizing for review screen (proportional widths based on Treeview)
 COLUMN_SIZES = {
     "date": 0.1,    # Corresponds to roughly 100px in customtk
@@ -724,6 +732,7 @@ class PacificaAgendaApp(App):
     meeting_dates_for_report: List[str] = []
     prompt_pass1: str = ""
     prompt_pass2: str = ""
+    csv_headers: dict = {}
 
     debug_console: TextInput | None = None
     sv_debug: ScrollView | None = None
@@ -743,21 +752,30 @@ class PacificaAgendaApp(App):
         # Load prompts from config, with fallback to defaults
         self.prompt_pass1 = self.CONF.get("prompt_pass1") or PROMPT_TEMPLATE_PASS1
         self.prompt_pass2 = self.CONF.get("prompt_pass2") or PROMPT_TEMPLATE_PASS2
+        # Load CSV headers from config, with fallback to defaults
+        self.csv_headers = self.CONF.get("csv_headers") or DEFAULT_CSV_HEADERS.copy()
 
     def _load_conf(self) -> dict:
         default_conf = {
             "model_path": "",
             "prompt_pass1": None,
             "prompt_pass2": None,
+            "csv_headers": None,
             "debug": False,
             "ignore_brackets": False,
         }
         try:
             with open(self.config_file, "r", encoding="utf-8") as fp:
                 data = json.load(fp)
+                # Ensure new keys exist for older configs
+                if "csv_headers" not in data:
+                    data["csv_headers"] = DEFAULT_CSV_HEADERS.copy()
+                if "ignore_brackets" not in data:
+                    data["ignore_brackets"] = False
                 default_conf.update(data)
         except Exception:
-            pass
+            # On first run or error, populate with defaults
+            default_conf["csv_headers"] = DEFAULT_CSV_HEADERS.copy()
         return default_conf
 
     def _save_conf(self):
@@ -915,7 +933,7 @@ class PacificaAgendaApp(App):
 
     def _process_csv(self, filepath: str):
         try:
-            self.csv_data, self.filtered_items = self.backend.process_csv(filepath)
+            self.csv_data, self.filtered_items = self.backend.process_csv(filepath, self.csv_headers)
         except Exception as exc:
             self._show_error("CSV Error", str(exc))
             return
@@ -999,22 +1017,22 @@ class PacificaAgendaApp(App):
 
         for idx, row in enumerate(self.filtered_items):
             # only mark pre-selected if flagged Y
-            include_flag = str(row.get("Include in Summary for Mayor", "")).upper() == "Y"
+            include_flag = str(row.get(self.csv_headers["include"], "")).upper() == "Y"
 
             # Extract individual column data
             # Get the ignore_brackets setting
             ignore_brackets = self.CONF.get("ignore_brackets", False)
 
-            date_text = str(row.get("MEETING DATE", "")).strip()
-            section_text = str(row.get("AGENDA SECTION", "")).replace("\n", " ").replace("•", "-").strip()
+            date_text = str(row.get(self.csv_headers["date"], "")).strip()
+            section_text = str(row.get(self.csv_headers["section"], "")).replace("\n", " ").replace("•", "-").strip()
             if section_text == "nan":
                 section_text = "placeholder" # Or suitable default/empty string
-            item_text = str(row.get("AGENDA ITEM", "")).replace("\n", " ").replace("•", "-").strip()
+            item_text = str(row.get(self.csv_headers["item"], "")).replace("\n", " ").replace("•", "-").strip()
             if item_text == "nan":
                 item_text = "unnamed item" # Or suitable default/empty string
             notes_text = ""
-            if pd.notna(row.get("NOTES")):
-                n = str(row["NOTES"]).replace("\n", " ").replace("•", "-").strip()
+            if pd.notna(row.get(self.csv_headers["notes"])):
+                n = str(row[self.csv_headers["notes"]]).replace("\n", " ").replace("•", "-").strip()
                 if n and n.lower() != "nan":
                     notes_text = n
             
@@ -1179,7 +1197,7 @@ class PacificaAgendaApp(App):
         title = Label(text="[b]Settings[/b]", markup=True, font_size=48, size_hint_y=None, height=80, color=[0, 0, 0, 1])  # increased font size and height
         root.add_widget(title)
 
-        grid = GridLayout(cols=2, rows=4, row_force_default=True, row_default_height=75, spacing=(10,10), size_hint_y=None)
+        grid = GridLayout(cols=2, rows=5, row_force_default=True, row_default_height=75, spacing=(10,10), size_hint_y=None)
         grid.bind(minimum_height=grid.setter('height'))
 
         # Model row
@@ -1233,6 +1251,36 @@ class PacificaAgendaApp(App):
         control_prompts.add_widget(edit_p2_btn)
         grid.add_widget(label_prompts)
         grid.add_widget(control_prompts)
+
+        # CSV Headers row
+        label_headers = Label(
+            text="CSV Column Headers",
+            color=[0, 0, 0, 1],
+            font_size=28,
+            bold=True,
+            halign='left',
+            valign='middle',
+            size_hint_x=0.3
+        )
+        label_headers.bind(size=lambda inst, *_: inst.setter('text_size')(inst, (inst.width, None)))
+        
+        control_headers = BoxLayout(orientation="horizontal", spacing=5, size_hint_x=0.7)
+        
+        # Create buttons for each header. Use smaller font size to fit.
+        btn_h_date = StyledButton(text="Date", font_size=22, on_release=lambda *_: self._open_header_editor("date", "Meeting Date Header"))
+        btn_h_section = StyledButton(text="Section", font_size=22, on_release=lambda *_: self._open_header_editor("section", "Agenda Section Header"))
+        btn_h_item = StyledButton(text="Item", font_size=22, on_release=lambda *_: self._open_header_editor("item", "Agenda Item Header"))
+        btn_h_notes = StyledButton(text="Notes", font_size=22, on_release=lambda *_: self._open_header_editor("notes", "Notes Header"))
+        btn_h_include = StyledButton(text="Include", font_size=22, on_release=lambda *_: self._open_header_editor("include", "Include Flag Header"))
+
+        control_headers.add_widget(btn_h_date)
+        control_headers.add_widget(btn_h_section)
+        control_headers.add_widget(btn_h_item)
+        control_headers.add_widget(btn_h_notes)
+        control_headers.add_widget(btn_h_include)
+        
+        grid.add_widget(label_headers)
+        grid.add_widget(control_headers)
 
         # Debug Mode row
         label_debug = Label(
@@ -1396,6 +1444,73 @@ class PacificaAgendaApp(App):
         self.CONF["ignore_brackets"] = value
         self._save_conf()
 
+    def _open_header_editor(self, header_key: str, title_text: str):
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        
+        title_label = Label(
+            text=f"Editing: {title_text}",
+            size_hint_y=None,
+            height=40,
+            font_size=24,
+            color=TEXT_COLOR
+        )
+        content.add_widget(title_label)
+        
+        info_label = Label(
+            text="Type the exact column header name from your CSV file. This is case-sensitive.",
+            size_hint_y=None,
+            height=50,
+            font_size=20,
+            color=TEXT_COLOR
+        )
+        info_label.bind(width=lambda inst, w: inst.setter("text_size")(inst, (w, None)))
+        content.add_widget(info_label)
+
+        text_input = TextInput(
+            text=self.csv_headers.get(header_key, ""),
+            font_size=24,
+            multiline=False,
+            size_hint_y=None,
+            height=50
+        )
+        content.add_widget(text_input)
+
+        content.add_widget(Widget()) # Spacer
+
+        btn_layout = BoxLayout(size_hint_y=None, height=75, spacing=10)
+        reset_btn = StyledButton(text="Reset to Default")
+        cancel_btn = StyledButton(text="Cancel")
+        save_btn = StyledButton(text="Save & Close")
+        btn_layout.add_widget(reset_btn)
+        btn_layout.add_widget(cancel_btn)
+        btn_layout.add_widget(save_btn)
+        content.add_widget(btn_layout)
+
+        popup = Popup(title=f"Edit {title_text}", content=content, size_hint=(0.8, 0.6), auto_dismiss=False)
+
+        def on_save(*_):
+            new_header = text_input.text.strip()
+            if not new_header:
+                self._show_error("Invalid Header", "Header name cannot be empty.")
+                return
+            self.csv_headers[header_key] = new_header
+            self.CONF["csv_headers"] = self.csv_headers
+            self._save_conf()
+            self._show_info(f"'{title_text}' header saved.")
+            popup.dismiss()
+
+        def on_reset(*_):
+            text_input.text = DEFAULT_CSV_HEADERS[header_key]
+
+        def on_cancel(*_):
+            popup.dismiss()
+
+        save_btn.bind(on_release=on_save)
+        reset_btn.bind(on_release=on_reset)
+        cancel_btn.bind(on_release=on_cancel)
+
+        popup.open()
+
     def _open_prompt_editor(self, prompt_type: str):
         if prompt_type == "pass1":
             title = "Edit Pass 1 (Summarization) Prompt"
@@ -1531,6 +1646,8 @@ class PacificaAgendaApp(App):
     # ---------------------------------------------------------------- Help & Credits
     def _build_help(self):
         scr = HelpScreen(name="help")
+        # When this screen is about to be shown, update the help text
+        scr.bind(on_pre_enter=self._update_help_text)
         root = BoxLayout(orientation="vertical", padding=20, spacing=20)
         scr.add_widget(root)
         
@@ -1550,21 +1667,43 @@ class PacificaAgendaApp(App):
         content = BoxLayout(orientation="vertical", spacing=15, size_hint_y=None, padding=20)
         content.bind(minimum_height=content.setter('height'))
         
+        # Create the label but don't set its text yet. _update_help_text will do it.
+        self.help_label = Label(
+            text="", # Will be populated dynamically
+            markup=True,
+            color=[0, 0, 0, 1],
+            text_size=(None, None),
+            halign="left",
+            valign="top",
+            size_hint_y=None
+        )
+        self.help_label.bind(width=lambda inst, width: inst.setter('text_size')(inst, (width - 40, None)))
+        self.help_label.bind(texture_size=lambda inst, size: setattr(inst, 'height', size[1]))
+        content.add_widget(self.help_label)
+        
+        scroll.add_widget(content)
+        root.add_widget(scroll)
+        
+        self.screen_manager.add_widget(scr)
+
+    def _update_help_text(self, *args):
+        # This method is called right before the help screen is displayed.
+        # It builds the help text with the current CSV header configuration.
         help_text = (
             "[size=42][b]How to Use the Agenda Summary Generator[/b][/size]\n\n"
             "[size=30][b]Step 1: Prepare Your CSV File[/b][/size]\n"
-            "• Ensure your CSV file contains these required columns:\n"
-            "  - MEETING DATE\n"
-            "  - AGENDA SECTION\n"
-            "  - AGENDA ITEM\n"
-            "  - NOTES\n"
-            "  - Include in Summary for Mayor (must be 'Y' for auto-selection)\n\n"
+            "• Ensure your CSV file contains these required columns (these can be changed in Settings):\n"
+            f"  - \"[b]{self.csv_headers['date']}[/b]\" for the Meeting Date\n"
+            f"  - \"[b]{self.csv_headers['section']}[/b]\" for the Agenda Section\n"
+            f"  - \"[b]{self.csv_headers['item']}[/b]\" for the Item Name\n"
+            f"  - \"[b]{self.csv_headers['notes']}[/b]\" for the Item Notes\n"
+            f"  - \"[b]{self.csv_headers['include']}[/b]\" for auto-selection (must be 'Y')\n\n"
             "[size=30][b]Step 2: Upload Your File[/b][/size]\n"
             "• Click the large upload area on the home screen or\n"
             "• Drag and drop your CSV file directly onto the upload zone\n\n"
             "[size=30][b]Step 3: Review and Select Items[/b][/size]\n"
             "• Review the automatically filtered agenda items\n"
-            "• Items marked 'Y' for 'Include in Summary for Mayor' are pre-selected\n"
+            f"• Items marked 'Y' for '[b]{self.csv_headers['include']}[/b]' are pre-selected\n"
             "• Click individual items to toggle selection\n"
             "• Use 'Select All' or 'Deselect All' buttons for bulk actions\n\n"
             "[size=30][b]Step 4: Generate the Report[/b][/size]\n"
@@ -1576,6 +1715,7 @@ class PacificaAgendaApp(App):
             "• Choose your save location using the native file dialog\n"
             "• The report will be saved as a Word (.docx) document\n\n"
             "[size=30][b]Settings Menu[/b][/size]\n"
+            "• [b]CSV Column Headers[/b]: Change the names of the columns the app looks for in your CSV file.\n"
             "• [b]Ignore Brackets[/b]: Toggle this setting to ignore any text within square brackets '[]' in the source CSV file.\n"
             "• [b]Uninstall[/b]: This will remove all cached application data, including the downloaded model and settings. The application will close, and you will need to manually drag the app to the Trash to complete the uninstallation.\n\n"
             "[size=30][b]Tips for Best Results[/b][/size]\n"
@@ -1584,24 +1724,8 @@ class PacificaAgendaApp(App):
             "• Use the Notes field for additional context when needed\n"
             "• Review the generated content after saving as .docx before flattening to .pdf"
         )
-        
-        help_label = Label(
-            text=help_text,
-            markup=True,
-            color=[0, 0, 0, 1],
-            text_size=(None, None),
-            halign="left",
-            valign="top",
-            size_hint_y=None
-        )
-        help_label.bind(width=lambda inst, width: inst.setter('text_size')(inst, (width - 40, None)))
-        help_label.bind(texture_size=lambda inst, size: setattr(inst, 'height', size[1]))  # let's just grab the height from the texture_size list
-        content.add_widget(help_label)
-        
-        scroll.add_widget(content)
-        root.add_widget(scroll)
-        
-        self.screen_manager.add_widget(scr)
+        if hasattr(self, 'help_label'):
+            self.help_label.text = help_text
 
     def _build_credits(self):
         scr = CreditsScreen(name="credits")
@@ -1760,6 +1884,7 @@ class PacificaAgendaApp(App):
                 prompt_template_pass2=self.prompt_pass2,
                 debug_callback=debug_cb,
                 ignore_brackets=self.CONF.get("ignore_brackets", False),
+                csv_headers=self.csv_headers,
             )
         except RuntimeError as exc:
             self._show_error("Model Error", str(exc))
