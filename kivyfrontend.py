@@ -1254,7 +1254,7 @@ class PacificaAgendaApp(App):
 
         # CSV Headers row
         label_headers = Label(
-            text="CSV Column Headers",
+            text="CSV Column Required Header Names",
             color=[0, 0, 0, 1],
             font_size=28,
             bold=True,
@@ -1266,19 +1266,20 @@ class PacificaAgendaApp(App):
         
         control_headers = BoxLayout(orientation="horizontal", spacing=5, size_hint_x=0.7)
         
-        # Create buttons for each header. Use smaller font size to fit.
-        btn_h_date = StyledButton(text="Date", font_size=22, on_release=lambda *_: self._open_header_editor("date", "Meeting Date Header"))
-        btn_h_section = StyledButton(text="Section", font_size=22, on_release=lambda *_: self._open_header_editor("section", "Agenda Section Header"))
-        btn_h_item = StyledButton(text="Item", font_size=22, on_release=lambda *_: self._open_header_editor("item", "Agenda Item Header"))
-        btn_h_notes = StyledButton(text="Notes", font_size=22, on_release=lambda *_: self._open_header_editor("notes", "Notes Header"))
-        btn_h_include = StyledButton(text="Include", font_size=22, on_release=lambda *_: self._open_header_editor("include", "Include Flag Header"))
+        # Create buttons for each header. Use smaller font size to fit and set fixed width.
+        btn_h_date = StyledButton(text="Date", font_size=22, size_hint_x=None, width=150, on_release=lambda *_: self._open_header_editor("date", "Meeting Date Header"))
+        btn_h_section = StyledButton(text="Section", font_size=22, size_hint_x=None, width=150, on_release=lambda *_: self._open_header_editor("section", "Agenda Section Header"))
+        btn_h_item = StyledButton(text="Item", font_size=22, size_hint_x=None, width=150, on_release=lambda *_: self._open_header_editor("item", "Agenda Item Header"))
+        btn_h_notes = StyledButton(text="Notes", font_size=22, size_hint_x=None, width=150, on_release=lambda *_: self._open_header_editor("notes", "Notes Header"))
+        btn_h_include = StyledButton(text="Include", font_size=22, size_hint_x=None, width=150, on_release=lambda *_: self._open_header_editor("include", "Include Flag Header"))
 
         control_headers.add_widget(btn_h_date)
         control_headers.add_widget(btn_h_section)
         control_headers.add_widget(btn_h_item)
         control_headers.add_widget(btn_h_notes)
         control_headers.add_widget(btn_h_include)
-        
+        control_headers.add_widget(Widget()) # Add a spacer to push buttons to the left
+
         grid.add_widget(label_headers)
         grid.add_widget(control_headers)
 
