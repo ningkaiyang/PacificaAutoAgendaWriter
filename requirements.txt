@@ -1,0 +1,20 @@
+# Python library requirements for the AutoAgendaWriter application.
+# Use 'pip install -r requirements.txt' to install them.
+
+# GUI Framework
+Kivy==2.3.1
+Pillow==11.3.0  # For image support in Kivy
+
+# Data Processing
+pandas==2.3.1
+numpy==2.3.1    # Core dependency for pandas
+
+# LLM and AI
+llama-cpp-python==0.3.13
+huggingface-hub==0.33.4  # For downloading models from Hugging Face Hub
+
+# Document Generation
+python-docx==1.2.0
+
+# For system notifications and other platform-specific features
+plyer
