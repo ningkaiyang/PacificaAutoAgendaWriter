@@ -1727,40 +1727,54 @@ class PacificaAgendaApp(App):
         # This method is called right before the help screen is displayed.
         # It builds the help text with the current CSV header configuration.
         help_text = (
-            "[size=42][b]How to Use the Agenda Summary Generator[/b][/size]\n\n"
-            "[size=30][b]Step 1: Prepare Your CSV File[/b][/size]\n"
-            "• Ensure your CSV file contains these required columns (these can be changed in Settings):\n"
-            f"  - \"[b]{self.csv_headers['date']}[/b]\" for the Meeting Date\n"
-            f"  - \"[b]{self.csv_headers['section']}[/b]\" for the Agenda Section\n"
-            f"  - \"[b]{self.csv_headers['item']}[/b]\" for the Item Name\n"
-            f"  - \"[b]{self.csv_headers['notes']}[/b]\" for the Item Notes\n"
-            f"  - \"[b]{self.csv_headers['include']}[/b]\" for auto-selection (must be 'Y')\n"
-            "• [b]IMPORTANT[/b]: The meeting date column must start with a number (e.g., '01-Jan' or '1/1/2024') and other columns should not, for the app to correctly identify agenda items.\n\n"
-            "[size=30][b]Step 2: Upload Your File[/b][/size]\n"
-            "• Click the large upload area on the home screen or\n"
-            "• Drag and drop your CSV file directly onto the upload zone\n\n"
-            "[size=30][b]Step 3: Review and Select Items[/b][/size]\n"
-            "• Review the automatically filtered agenda items\n"
-            f"• Items marked 'Y' for '[b]{self.csv_headers['include']}[/b]' are pre-selected\n"
-            "• Click individual items to toggle selection\n"
-            "• Use 'Select All' or 'Deselect All' buttons for bulk actions\n\n"
-            "[size=30][b]Step 4: Generate the Report[/b][/size]\n"
-            "• Click 'Generate' to start the AI processing\n"
-            "• Watch the real-time generation progress\n"
-            "• The process uses a two-pass approach for better quality\n\n"
-            "[size=30][b]Step 5: Save Your Report[/b][/size]\n"
-            "• Once generation is complete, click 'Save'\n"
-            "• Choose your save location using the native file dialog\n"
-            "• The report will be saved as a Word (.docx) document\n\n"
-            "[size=30][b]Settings Menu[/b][/size]\n"
-            "• [b]CSV Column Headers[/b]: Change the names of the columns the app looks for in your CSV file.\n"
-            "• [b]Ignore Brackets[/b]: Toggle this setting to ignore any text within square brackets '[]' in the source CSV file.\n"
-            "• [b]Uninstall[/b]: This will remove all cached application data, including the downloaded model and settings. The application will close, and you will need to manually drag the app to the Trash to complete the uninstallation.\n\n"
-            "[size=30][b]Tips for Best Results[/b][/size]\n"
-            "• Ensure consistent date formatting in your CSV\n"
-            "• Keep agenda item descriptions clear and concise\n"
-            "• Use the Notes field for additional context when needed\n"
-            "• Review the generated content after saving as .docx before flattening to .pdf"
+            "[size=42][b]Welcome to the Agenda Summary Generator v3.0![/b][/size]\n\n"
+            "This guide will walk you through using the application, from initial setup to generating your first report.\n\n"
+            
+            "[size=34][b]Part 1: First-Time Setup[/b][/size]\n\n"
+            "[size=30][b]Step 1: Install the AI Model[/b][/size]\n"
+            "The first time you run the app, you need to install the local AI model. This is a one-time download (~4GB).\n"
+            "1. On the home screen, click '[b]Settings[/b]'.\n"
+            "2. In the Settings menu, find the 'Model' section and click the '[b]Install[/b]' button.\n"
+            "3. Confirm the download. The app will download the model to a local folder. This may take a few minutes.\n"
+            "4. Once complete, the status will show 'Ready', and you can return to the home screen.\n\n"
+
+            "[size=34][b]Part 2: Generating a Report[/b][/size]\n\n"
+            "[size=30][b]Step 2: Prepare Your CSV File[/b][/size]\n"
+            "• Your data must be in a Comma-Separated Value (.csv) file.\n"
+            "• The app needs specific column headers to find the data. By default, it looks for:\n"
+            f"    - \"[b]{self.csv_headers['date']}[/b]\" for the Meeting Date\n"
+            f"    - \"[b]{self.csv_headers['section']}[/b]\" for the Agenda Section\n"
+            f"    - \"[b]{self.csv_headers['item']}[/b]\" for the Agenda Item Title\n"
+            f"    - \"[b]{self.csv_headers['notes']}[/b]\" for any additional notes\n"
+            f"    - \"[b]{self.csv_headers['include']}[/b]\" to automatically select an item (the cell value must be '[b]Y[/b]')\n"
+            "• [b]IMPORTANT[/b]: For the app to correctly identify which rows are agenda items, the value in your 'date' column must start with a number (e.g., '01-Jan-2024' or '1/1/24').\n\n"
+
+            "[size=30][b]Step 3: Upload Your File[/b][/size]\n"
+            "• On the home screen, either [b]drag and drop[/b] your .csv file onto the large upload area, or [b]click the area[/b] to open a file browser.\n\n"
+
+            "[size=30][b]Step 4: Review and Select Items[/b][/size]\n"
+            "• After uploading, you'll see a list of all agenda items found in your file.\n"
+            "• Items are automatically checked if their '[b]Include[/b]' column was 'Y'.\n"
+            "• You can manually check or uncheck any item by clicking on it.\n"
+            "• Use the '[b]Select All[/b]' and '[b]Deselect All[/b]' buttons for quick changes.\n\n"
+            
+            "[size=30][b]Step 5: Generate the Summary[/b][/size]\n"
+            "• Once you're happy with your selections, click the '[b]Generate[/b]' button.\n"
+            "• You will be taken to a new screen where you can see the AI generating the report in real-time.\n"
+            "• The output window and debug console (if enabled) will scroll automatically.\n\n"
+
+            "[size=30][b]Step 6: Save Your Report[/b][/size]\n"
+            "• When the process is finished, the '[b]Save[/b]' button will become active.\n"
+            "• A notification sound will play, and the app window will come to the front.\n"
+            "• Click '[b]Save[/b]', choose a location, and the report will be saved as a formatted Microsoft Word (.docx) file.\n\n"
+
+            "[size=34][b]Part 3: Advanced Settings[/b][/size]\n\n"
+            "The Settings screen provides powerful customization options:\n"
+            "• [b]CSV Column Headers[/b]: If your CSV file uses different header names (e.g., 'Meeting_Date' instead of 'MEETING DATE'), you can change what the app looks for here. Click each button ('Date', 'Section', etc.) to edit the corresponding header name.\n"
+            "• [b]Prompt Templates[/b]: Advanced users can edit the instructions (prompts) given to the AI. This allows for fine-tuning the summarization and formatting style.\n"
+            "• [b]Debug Mode[/b]: Toggling this on will show a detailed debug console on the generation screen, which is useful for troubleshooting.\n"
+            "• [b]Ignore Bracketed Text[/b]: When enabled, the app will automatically remove any text found inside square brackets `[]` from your CSV data before sending it to the AI.\n"
+            "• [b]Uninstall App[/b]: This provides a quick way to completely remove all application data, including the downloaded model, settings, and logs. [b]Settings deletion is irreversible.[/b]"
         )
         if hasattr(self, 'help_label'):
             self.help_label.text = help_text
@@ -1848,7 +1862,7 @@ class PacificaAgendaApp(App):
         content.add_widget(Widget(size_hint_y=None, height=15))
         
         # version
-        add_centered("Version 2.0 - Kivy Edition", 38, bold=True)
+        add_centered("Version 3.0 - Kivy Overhaul", 38, bold=True)
         content.add_widget(Widget(size_hint_y=None, height=15))
 
         # description

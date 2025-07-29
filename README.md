@@ -1,39 +1,50 @@
 # City of Pacifica - Agenda Summary Generator
 
 ## Overview
-This application is designed to significantly streamline the process of creating comprehensive agenda summaries specifically for the City of Pacifica City Council meetings. It operates by ingesting a structured comma-separated value (CSV) file, leveraging a local Large Language Model (LLM) to perform both summarization and categorization of agenda items, and subsequently generating a professionally formatted Microsoft Word (.docx) document that is ready for review and finalization. The goal is to provide an efficient, privacy-focused, and user-friendly tool for managing meeting agenda data.
+This application is designed to significantly streamline the process of creating comprehensive agenda summaries for the City of Pacifica City Council meetings. It operates by ingesting a structured comma-separated value (CSV) file, leveraging a local Large Language Model (LLM) to perform both summarization and categorization of agenda items, and subsequently generating a professionally formatted Microsoft Word (.docx) document that is ready for review and finalization. The goal is to provide an efficient, privacy-focused, and user-friendly tool for managing meeting agenda data.
 
 ## Key Features
-*   **CSV Ingestion:** Robustly parses and extracts agenda items directly from a `.csv` file. The application expects specific column headers within the CSV file for proper data processing.
-*   **AI-Powered Summarization:** Employs a sophisticated two-pass approach utilizing a locally executed LLM. This method ensures the generation of high-quality, concise summaries while maintaining user privacy, as the data does not leave the user's machine.
-*   **Automated Formatting:** Automatically generates a professionally formatted `.docx` report. This includes the application of appropriate headers, structured sections, and consistent styling to ensure readability and a polished appearance.
-*   **Cross-Platform GUI:** Developed using the Kivy framework, providing a consistent and responsive graphical user interface experience across major operating systems, including Windows, macOS, and Linux.
-*   **User-Friendly Interface:** Features an intuitive interface designed for ease of use. Key elements include drag-and-drop functionality for uploading CSV files, a clear mechanism for reviewing and selecting specific agenda items to include in the summary, and real-time progress indicators during the generation process.
-*   **Configurable:** Allows users to customize the application's behavior through a dedicated settings menu. This includes the ability to select to inspect outputs, install the LLM model, define custom prompt templates, or perform a clean uninstall.
-*   **Modifiable Headers:** The names of the CSV columns ("MEETING DATE", "AGENDA SECTION", etc.) can be customized in the settings menu to match your specific file format. These settings are saved and loaded automatically.
-*   **System Notifications:** Receive a native OS notification (including a sound) when report generation is complete, allowing you to multitask without missing the finished report.
+*   **GUI Overhaul:** A redesigned, modern user interface built with Kivy for a more intuitive and visually appealing experience.
+*   **One-Click Model Installation:** A simple, one-time setup process to download and install the required local LLM directly from the settings menu.
+*   **Full Item Parsing & Auto-Selection:** The application now parses all agenda items from the CSV and presents them in a clear, scrollable list. Items can be automatically pre-selected for inclusion based on a flag in the source file.
+*   **Flexible CSV Headers:** Customize the exact column header names (e.g., "MEETING DATE", "AGENDA ITEM") in the settings to match your specific CSV file format. No need to edit the file itself.
+*   **Customizable AI Prompts:** Advanced users can modify the prompt templates used for both summarization (Pass 1) and formatting (Pass 2) via the settings menu, allowing for fine-tuned control over the AI's output.
+*   **Self-Scrolling Console:** Both the main generation output and the optional debug console now scroll automatically, allowing you to watch the process unfold in real-time without manual intervention.
+*   **System Notifications:** When a report is finished, the application window is brought to the foreground, a sound effect is played, and a native OS notification is displayed, so you never miss a completed task.
+*   **Quick Uninstall:** A clean uninstall option in the settings menu allows for the complete removal of all application data, including the downloaded model and configuration files.
+*   **Cross-Platform:** Built with Python and Kivy to run on Windows, macOS, and Linux.
+
+## Installation
+1.  **Clone the repository or download the source code.**
+2.  **Navigate to the application directory:**
+    ```bash
+    cd /path/to/AutoAgendaWriter
+    ```
+3.  **Install the required dependencies using pip:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+    This will install Kivy, pandas, llama-cpp-python, and all other necessary libraries.
 
 ## How to Use
-1.  **Launch App:** Execute the application by running the Python script: `python3 kivyfrontend.py`.
-2.  **Install Model:** Upon the first launch of the application, navigate to the `Settings` menu and click the `Install` button to initiate the download of the required AI model (`unsloth/Qwen3-4B-GGUF`). This is a one-time setup procedure.
-3.  **Prepare CSV:** Ensure your agenda data is organized within a `.csv` file, adhering to the required column structure specified by the application.
-4.  **Upload File:** You can either drag and drop your `.csv` file directly onto the main application window or use the browse button to select and upload the file.
-5.  **Review Items:** Carefully review the list of agenda items presented in the application. Deselect any items that you wish to exclude from the final summary.
-6.  **Generate:** Click the "Generate" button to initiate the AI-powered summarization process based on the selected items and configured settings.
-7.  **Save:** Once the generation process is complete, save the resulting report as a `.docx` file to your desired location.
+1.  **Launch App:** Execute the application by running the Python script:
+    ```bash
+    python3 kivyfrontend.py
+    ```
+2.  **Install Model (First Time Only):** Upon the first launch, navigate to the `Settings` menu and click the `Install` button to download the required AI model. This is a one-time setup.
+3.  **Prepare CSV:** Ensure your agenda data is in a `.csv` file. The column headers should match the application's settings (which can be configured).
+4.  **Upload File:** Drag and drop your `.csv` file onto the main window or use the upload area to browse for it.
+5.  **Review Items:** A new screen will appear showing all agenda items. Items flagged for inclusion will be pre-selected. Review and toggle selections as needed.
+6.  **Generate:** Click the "Generate" button to start the AI summarization process.
+7.  **Save:** Once complete, save the report as a `.docx` file.
 
 ## Current Status
-This application is currently at **Version 2.0 (Kivy Edition)**. It represents a significant update, having been completely rebuilt from scratch using the Kivy framework to deliver a more robust, feature-rich, and consistent cross-platform experience.
-
-*   **Built-in Model Installer:** The application includes a convenient one-click installer for the necessary AI model (`unsloth/Qwen3-4B-GGUF`). The model is downloaded and stored in a local application data folder, ensuring it is readily available for future use.
-*   **Placeholders:** The generated Word document incorporates specific placeholders (e.g., "TBD" items, "Significant Items Completed Since [Date]"). These placeholders are intended to facilitate final human review, manual additions, and adjustments to the summary.
-
-## TBD (Future Development)
-*   **Video Demonstration:** A link to a video demonstration is planned to be added to the help tab in the future.
-*   **Help Tab Improvements:** Plans are underway to enhance the help tab with more detailed instructions, comprehensive troubleshooting tips, and additional resources.
+This application is at **Version 3.0 (Kivy Overhaul)**. It represents a major architectural and feature update, focusing on user experience, configurability, and a more robust workflow.
 
 ## Technical Stack
 *   **GUI:** `Kivy`
 *   **Data Processing:** `pandas`
 *   **Local LLM Interaction:** `llama-cpp-python`
+*   **Model Management:** `huggingface-hub`
 *   **Word Document Generation:** `python-docx`
+*   **System Notifications:** `plyer`
