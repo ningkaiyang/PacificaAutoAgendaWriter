@@ -30,11 +30,8 @@ from llama_cpp import Llama
 MODEL_REPO = "unsloth/Qwen3-4B-GGUF"
 MODEL_FILENAME = "Qwen3-4B-Q6_K.gguf"
 
-# Optional - only for simple speed / memory debug
-try:
-    import resource
-except ImportError:  # pragma: no cover  (Windows)
-    resource = None  # type: ignore
+# resource module is Unix-specific, so we remove it for Windows compatibility.
+resource = None
 
 # --------------------------------------------------------------------------------------
 # Helpers
@@ -85,10 +82,7 @@ class TokenStreamer:
             stats.append(f"\nAverage speed: {self._tok/dt:.2f} tok/s")
             stats.append(f"Tokens: {self._tok}")
             stats.append(f"Elapsed Time: {dt:.2f}s")
-            # memory usage on macOS is in bytes, so i'll convert to MB
-            if resource:
-                mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 / 1024
-                stats.append(f"Peak Memory Usage: {mem_mb:.2f} MB")
+            # Peak memory usage reporting is disabled as it's not cross-platform.
             
             stats_str = "\n".join(stats)
             
@@ -306,6 +300,7 @@ class AgendaBackend:
                         n_ctx=10000,
                         n_threads=default_threads(),
                         verbose=False,
+                        n_gpu_layers=-1,
                     )
             except Exception as exc:
                 traceback.print_exc()
@@ -341,6 +336,7 @@ class AgendaBackend:
                     chat_format="chatml",
                     n_ctx=10000,
                     n_threads=default_threads(),
+                    n_gpu_layers=-1,
                 )
 
             # The model is now loaded, assign it to the backend

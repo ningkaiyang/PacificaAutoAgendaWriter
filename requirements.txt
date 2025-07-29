@@ -18,4 +18,4 @@ python-docx==1.2.0
 
 # For system notifications and other platform-specific features
 plyer
-pyobjus; sys_platform == 'darwin'  # For macOS notifications via plyer
+win10toast; sys_platform == 'win32'  # For Windows notifications via plyer

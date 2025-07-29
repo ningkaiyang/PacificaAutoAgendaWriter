@@ -103,8 +103,23 @@ COLUMN_SPACING = 15  # Spacing between columns within an item row
 # Native file dialog functions
 # --------------------------------------------------------------------------------------
 def native_open_file_dialog(title="Select File", file_types=None, multiple=False):
-    """open file dialog using native OS dialogs (macOS via osascript)"""
-    if platform == "macosx":
+    """open file dialog using native OS dialogs (macOS via osascript, Windows via tkinter)"""
+    if platform == 'win':
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()  # Hide the main window
+            filepath = filedialog.askopenfilename(
+                title=title,
+                filetypes=file_types
+            )
+            return [filepath] if filepath else []
+        except Exception as e:
+            print(f"native file dialog error on windows: {e}")
+            return None # fallback needed
+
+    elif platform == "macosx":
         try:
             # build applescript command that returns POSIX path directly
             script = f'''
@@ -156,8 +171,23 @@ def native_open_file_dialog(title="Select File", file_types=None, multiple=False
 
 
 def native_save_file_dialog(title="Save File", filename="", file_types=None):
-    """save file dialog using native OS dialogs (macOS via osascript)"""
-    if platform == "macosx":
+    """save file dialog using native OS dialogs (macOS via osascript, Windows via tkinter)"""
+    if platform == 'win':
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()  # Hide the main window
+            filepath = filedialog.asksaveasfilename(
+                title=title,
+                initialfile=filename,
+                filetypes=file_types,
+                defaultextension=".docx"
+            )
+            return filepath if filepath else ""
+        except Exception as e:
+            print(f"native file dialog error on windows: {e}")
+    elif platform == "macosx":
         try:
             # build applescript for save dialog that returns POSIX path directly
             script = f'''
@@ -2051,6 +2081,7 @@ class PacificaAgendaApp(App):
                 elif os.path.exists("logo.png"):
                     icon_path = "logo.png"
                 
+
                 notification.notify(
                     title="Generation Complete",
                     message="The agenda summary report is ready to be saved.",
