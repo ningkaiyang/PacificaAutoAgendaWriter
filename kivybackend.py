@@ -339,10 +339,12 @@ class AgendaBackend:
                     n_gpu_layers=-1,
                 )
 
+            final_model_path = new_llm_instance.model_path
+            
             # The model is now loaded, assign it to the backend
             self.llm_model = new_llm_instance
             # Get the actual path string from the instance
-            final_model_path = self.llm_model.model_path
+            self.model_path = final_model_path
 
             print(f"[backend] Model downloaded and loaded from: {final_model_path}")
             if done_callback:

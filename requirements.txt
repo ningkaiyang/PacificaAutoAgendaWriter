@@ -10,6 +10,16 @@ pandas==2.3.1
 numpy==2.3.1    # Core dependency for pandas
 
 # LLM and AI
+# LLM and AI
+# IMPORTANT FOR WINDOWS USERS:
+# Installing llama-cpp-python can be complex. For GPU acceleration (NVIDIA),
+# it is highly recommended to install it manually *before* running `pip install -r requirements.txt`.
+# Open a command prompt and run these commands, replacing with your CUDA version if needed:
+#   set CMAKE_ARGS="-DLLAMA_CUBLAS=on"
+#   set FORCE_CMAKE=1
+#   pip install llama-cpp-python --no-cache-dir --force-reinstall
+# If you do not have an NVIDIA GPU or do not want GPU support, the standard pip install may work,
+# but you might need the Visual Studio Build Tools installed.
 llama-cpp-python==0.3.13
 huggingface-hub==0.33.4  # For downloading models from Hugging Face Hub
 

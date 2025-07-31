@@ -1,47 +1,125 @@
 # build.py
 import PyInstaller.__main__
 import os
+import sys
+import shutil
+from pathlib import Path
 
 # --- Configuration ---
 APP_NAME = "AutoAgendaWriter"
 ENTRY_POINT = "kivyfrontend.py"
 ICON_FILE = "logo.ico"
 
+def find_kivy_hooks():
+    """Find the path to Kivy's PyInstaller hooks."""
+    try:
+        import Kivy
+        kivy_path = Path(Kivy.__file__).parent
+        hooks_path = kivy_path / "tools" / "packaging" / "pyinstaller" / "hooks"
+        if hooks_path.is_dir():
+            return str(hooks_path)
+    except (ImportError, AttributeError):
+        pass
+    print("Warning: Could not find Kivy hooks path. The build may fail.")
+    return None
+
 def main():
+    # --- Platform-specific setup ---
+    is_windows = sys.platform.startswith('win')
+    
+    # Kivy hooks are essential for a successful build
+    kivy_hooks_path = find_kivy_hooks()
+
     # Define PyInstaller arguments
     pyinstaller_args = [
         '--name', APP_NAME,
         '--onefile',
-        '--windowed',  # Hides the console window
+        '--windowed',  # Hides the console window on release builds
         f'--icon={ICON_FILE}',
 
         # --- Add data files ---
-        # Syntax: '--add-data', 'source{os.pathsep}destination'
-        # '.' means the root of the bundled app.
+        # Explicitly add data files. PyInstaller's --add-data format is 'source:dest_in_bundle'
+        # On Windows, the separator is ';', on others it's ':'
         '--add-data', f'logo.png{os.pathsep}.',
         '--add-data', f'notification.wav{os.pathsep}.',
 
         # --- Add hidden imports that PyInstaller might miss ---
-        '--hidden-import', 'plyer.platforms.win.notification',
+        # Kivy and its dependencies
+        '--hidden-import', 'kivy.app',
+        '--hidden-import', 'kivy.uix.boxlayout',
+        '--hidden-import', 'kivy.uix.button',
+        '--hidden-import', 'kivy.uix.checkbox',
+        '--hidden-import', 'kivy.uix.filechooser',
+        '--hidden-import', 'kivy.uix.gridlayout',
+        '--hidden-import', 'kivy.uix.image',
+        '--hidden-import', 'kivy.uix.label',
+        '--hidden-import', 'kivy.uix.popup',
+        '--hidden-import', 'kivy.uix.recycleview',
+        '--hidden-import', 'kivy.uix.screenmanager',
+        '--hidden-import', 'kivy.uix.scrollview',
+        '--hidden-import', 'kivy.uix.textinput',
+        '--hidden-import', 'kivy.graphics.texture',
+        '--hidden-import', 'kivy.graphics.vertex_instructions',
+        '--hidden-import', 'kivy.properties',
 
+        # Plyer and platform-specific backends
+        '--hidden-import', 'plyer.platforms.win.notification',
+        '--hidden-import', 'plyer.platforms.win.filechooser',
+
+        # Other dependencies
+        '--hidden-import', 'pandas',
+        '--hidden-import', 'huggingface_hub',
+        '--hidden-import', 'docx',
+        
         # --- Entry point script ---
         ENTRY_POINT
     ]
 
-    print(f"Running PyInstaller with args: {pyinstaller_args}")
+    # Add Kivy hooks path to the command
+    if kivy_hooks_path:
+        pyinstaller_args.extend(['--additional-hooks-dir', kivy_hooks_path])
+
+    print("--- Starting PyInstaller Build ---")
+    print(f"App Name: {APP_NAME}")
+    print(f"Entry Point: {ENTRY_POINT}")
+    print(f"Platform: {sys.platform}")
+    print(f"PyInstaller command: {' '.join(pyinstaller_args)}")
+    print("------------------------------------")
 
     # Execute PyInstaller
-    PyInstaller.__main__.run(pyinstaller_args)
+    try:
+        PyInstaller.__main__.run(pyinstaller_args)
+        print("\n--- Build Successful ---")
+        print(f"Executable created in '{os.path.join(os.getcwd(), 'dist')}'")
+    except Exception as e:
+        print(f"\n--- Build Failed ---")
+        print(f"An error occurred during the PyInstaller build: {e}")
+        print("Please check the output above for specific error messages.")
+        sys.exit(1)
 
 if __name__ == '__main__':
-    # Create logo.ico from logo.png if it doesn't exist
+    # --- Pre-build Checks and Setup ---
+    # 1. Check for entry point file
+    if not os.path.exists(ENTRY_POINT):
+        print(f"Error: Entry point script '{ENTRY_POINT}' not found.")
+        sys.exit(1)
+
+    # 2. Create logo.ico from logo.png if it doesn't exist
     if not os.path.exists(ICON_FILE):
-        try:
-            from PIL import Image
-            img = Image.open('logo.png')
-            img.save(ICON_FILE)
-            print(f"'{ICON_FILE}' created from 'logo.png'.")
-        except Exception as e:
-            print(f"Warning: Could not create '{ICON_FILE}'. Please create it manually. Error: {e}")
+        print(f"Icon file '{ICON_FILE}' not found. Attempting to create it from 'logo.png'...")
+        if not os.path.exists('logo.png'):
+            print("Error: 'logo.png' not found. Cannot create icon.")
+            # We can proceed without an icon, PyInstaller will use a default one.
+        else:
+            try:
+                from PIL import Image
+                img = Image.open('logo.png')
+                img.save(ICON_FILE, sizes=[(256, 256), (128, 128), (64, 64), (32, 32), (16, 16)])
+                print(f"Successfully created '{ICON_FILE}' from 'logo.png'.")
+            except ImportError:
+                print("Warning: 'Pillow' library is not installed. Cannot create .ico file.")
+                print("Please install it with: pip install Pillow")
+            except Exception as e:
+                print(f"Warning: Could not create '{ICON_FILE}'. The build will use a default icon. Error: {e}")
 
     main()
