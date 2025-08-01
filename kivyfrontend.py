@@ -51,7 +51,13 @@ except ImportError:
         print("To enable them, run: pip install plyer", file=sys.stderr)
 
 from kivy.graphics import Color, Rectangle, RoundedRectangle
-from kivy.properties import BooleanProperty, ListProperty, ObjectProperty, StringProperty
+from kivy.properties import (
+    BooleanProperty,
+    ListProperty,
+    ObjectProperty,
+    StringProperty,
+    NumericProperty,
+)
 from kivy.uix.widget import Widget
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.boxlayout import BoxLayout
@@ -64,8 +70,8 @@ from kivy.uix.recycleview import RecycleView
 from kivy.uix.recycleview.views import RecycleDataViewBehavior
 from kivy.uix.screenmanager import Screen, ScreenManager, SlideTransition
 from kivy.uix.scrollview import ScrollView
+from kivy.uix.relativelayout import RelativeLayout
 from kivy.uix.textinput import TextInput
-from kivy.uix.widget import Widget
 from kivy.config import Config
 Config.set('input', 'mouse', 'mouse,multitouch_on_demand')
 
@@ -96,8 +102,6 @@ COLUMN_SIZES = {
     "item": 0.38,   # Corresponds to roughly 400px in customtk
     "notes": 0.35   # Corresponds to roughly 350px in customtk
 }
-COLUMN_PAD = 10     # Padding inside each column's label
-COLUMN_SPACING = 15  # Spacing between columns within an item row
 
 # --------------------------------------------------------------------------------------
 # Native file dialog functions
@@ -232,6 +236,9 @@ class StyledButton(Button):
     base_bg_color_rgba = ListProperty([0, 0, 0, 0]) # Initial dummy value, will be set in __init__
 
     def __init__(self, bg_color_name_override: str | None = None, **kw):
+        app = App.get_running_app()
+        scale = app.gui_scale_factor if app else 1.0
+
         # Determine the initial base color based on override or default
         initial_hex_color = bg_color_name_override if bg_color_name_override else PACIFICA_BLUE
         self.base_bg_color_rgba = self.hex2rgba(initial_hex_color, 1.0) # Set the ListProperty here
@@ -239,6 +246,13 @@ class StyledButton(Button):
         # set a default font_size if not provided by the caller
         if "font_size" not in kw:
             kw["font_size"] = 26
+        kw["font_size"] = kw["font_size"] * scale
+
+        if "width" in kw and kw["width"] is not None:
+            kw["width"] = kw["width"] * scale
+
+        if "height" in kw and kw["height"] is not None:
+            kw["height"] = kw["height"] * scale
 
         super().__init__(
             background_normal="",
@@ -261,11 +275,11 @@ class StyledButton(Button):
         with self.canvas.before:
             # Drop shadow
             self.shadow_color = Color(0, 0, 0, 0.2)
-            self.shadow = RoundedRectangle(pos=self.pos, size=self.size, radius=[15])
+            self.shadow = RoundedRectangle(pos=self.pos, size=self.size, radius=[15 * scale])
             
             # Main background. Use base_bg_color_rgba for the initial color.
             self.bg_color = Color(*self.base_bg_color_rgba) # Set initial drawing color from the property
-            self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15])
+            self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15 * scale])
 
     def on_mouse_pos(self, *args):
         """check if mouse is over the button"""
@@ -280,8 +294,10 @@ class StyledButton(Button):
 
     def _update_rect(self, *_):
         """update both shadow and main rectangle"""
+        app = App.get_running_app()
+        scale = app.gui_scale_factor if app else 1.0
         # shadow is slightly offset
-        shadow_offset = 3
+        shadow_offset = 3 * scale
         self.shadow.pos = (self.pos[0] + shadow_offset, self.pos[1] - shadow_offset)
         self.shadow.size = self.size
         
@@ -389,11 +405,14 @@ class UploadZone(BoxLayout):
     """Unified drag-and-drop and click upload zone."""
 
     def __init__(self, app_instance, **kw):
+        app = App.get_running_app()
+        scale = app.gui_scale_factor if app else 1.0
+
         super().__init__(
             orientation="vertical",
             size_hint=(1, 0.7),
-            padding=40,
-            spacing=20,
+            padding=40 * scale,
+            spacing=20 * scale,
             **kw,
         )
         self.app_instance = app_instance
@@ -403,15 +422,15 @@ class UploadZone(BoxLayout):
         # create the visual background
         with self.canvas.before:
             Color(*StyledButton.hex2rgba("#FFFFFF", 1))  # white base background
-            self._bg_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15])
+            self._bg_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15 * scale])
             self.overlay_color = Color(*StyledButton.hex2rgba(PACIFICA_BLUE, 0.4))  # blue overlay
-            self._overlay_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15])
+            self._overlay_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15 * scale])
 
         self.bind(pos=self._update_canvas, size=self._update_canvas)
 
         # main upload text/button
         self.upload_label = Label(
-            text="[size=48][b]Click to Upload CSV[/b][/size]\n[size=28]or drag and drop your file here[/size]",
+            text=f"[size={int(48 * scale)}][b]Click to Upload CSV[/b][/size]\n[size={int(28 * scale)}]or drag and drop your file here[/size]",
             markup=True,
             halign="center",
             valign="middle",
@@ -425,26 +444,28 @@ class UploadZone(BoxLayout):
 
         # file format hint
         self.hint_label = Label(
-            text="[size=22]Supported format: CSV files only[/size]",  # increased font size
+            text=f"[size={int(22 * scale)}]Supported format: CSV files only[/size]",  # increased font size
             markup=True,
             halign="center",
             valign="middle",
             color=[1, 1, 1, 0.8],  # slightly transparent white
             size_hint_y=None,
-            height=35,  # increased height
+            height=35 * scale,  # increased height
         )
         self.hint_label.bind(size=lambda inst, *_: inst.setter("text_size")(inst, (inst.width, None)))
         self.add_widget(self.hint_label)
 
     def set_uninstalled_state(self, is_uninstalled):
+        app = App.get_running_app()
+        scale = app.gui_scale_factor if app else 1.0
         self.is_uninstalled_state = is_uninstalled
         if is_uninstalled:
-            self.upload_label.text = "[size=48][b]App Not Installed[/b][/size]\n[size=28]Please go to Settings to install the model.[/size]"
+            self.upload_label.text = f"[size={int(48 * scale)}][b]App Not Installed[/b][/size]\n[size={int(28 * scale)}]Please go to Settings to install the model.[/size]"
             self.hint_label.text = ""
             self.overlay_color.rgba = StyledButton.hex2rgba("#D9534F", 0.7) # Red
         else:
-            self.upload_label.text = "[size=48][b]Click to Upload CSV[/b][/size]\n[size=28]or drag and drop your file here[/size]"
-            self.hint_label.text = "[size=22]Supported format: CSV files only[/size]"
+            self.upload_label.text = f"[size={int(48 * scale)}][b]Click to Upload CSV[/b][/size]\n[size={int(28 * scale)}]or drag and drop your file here[/size]"
+            self.hint_label.text = f"[size={int(22 * scale)}]Supported format: CSV files only[/size]"
             self.overlay_color.rgba = StyledButton.hex2rgba(PACIFICA_BLUE, 0.4) # Blue
         self._set_hover_state(False)
 
@@ -500,15 +521,17 @@ class UploadZone(BoxLayout):
 # --------------------------------------------------------------------------------------
 class AgendaItem(BoxLayout):
     def __init__(self, date_text, section_text, item_text, notes_text, index, app, **kwargs):
+        app = App.get_running_app()
+        scale = app.gui_scale_factor if app else 1.0
         # Overall padding for the entire row (checkbox + columns)
-        super().__init__(orientation="horizontal", padding=(20, 15), spacing=15, size_hint_y=None, **kwargs)
+        super().__init__(orientation="horizontal", padding=(20 * scale, 15 * scale), spacing=15 * scale, size_hint_y=None, **kwargs)
         
         self.app = app
         self.index = index
         self.selected = True  # start selected by default
         
         # Checkbox for selection
-        self.checkbox = CheckBox(active=True, size_hint_x=None, width=40)
+        self.checkbox = CheckBox(active=True, size_hint_x=None, width=40 * scale)
         self.checkbox.bind(active=self.on_checkbox_toggle)
         self.add_widget(self.checkbox)
         
@@ -516,8 +539,8 @@ class AgendaItem(BoxLayout):
         self.columns_container = BoxLayout(
             orientation="horizontal",
             size_hint_x=1, # Takes remaining horizontal space
-            spacing=COLUMN_SPACING,
-            padding=COLUMN_PAD # Padding inside the column container itself
+            spacing=15 * scale,
+            padding=10 * scale
         )
         self.add_widget(self.columns_container)
 
@@ -546,6 +569,8 @@ class AgendaItem(BoxLayout):
     
     def _create_label(self, text, size_hint_x_val):
         """Helper to create consistently styled column labels."""
+        app = App.get_running_app()
+        scale = app.gui_scale_factor if app else 1.0
         return Label(
             text=text,
             markup=False,
@@ -555,7 +580,7 @@ class AgendaItem(BoxLayout):
             color=[0, 0, 0, 1],
             size_hint_x=size_hint_x_val,
             size_hint_y=None,  # Important: don't let label stretch vertically by default
-            font_size=26 # Increased font size
+            font_size=26 * scale # Increased font size
         )
     
     def _setup_initial_size(self):
@@ -596,8 +621,10 @@ class AgendaItem(BoxLayout):
         # Set the height of the columns_container to fit the tallest label plus its vertical padding
         self.columns_container.height = max_label_height + (self.columns_container.padding[1] + self.columns_container.padding[3])
         
+        app = App.get_running_app()
+        scale = app.gui_scale_factor if app else 1.0
         # Set the overall AgendaItem (row) height, ensuring a minimum height
-        self.height = max(50, self.columns_container.height + (self.padding[1] + self.padding[3]))
+        self.height = max(50 * scale, self.columns_container.height + (self.padding[1] + self.padding[3]))
 
     
     def on_size(self, *args):
@@ -775,6 +802,7 @@ class CreditsScreen(Screen):
 class PacificaAgendaApp(App):
     title = "City of Pacifica - Agenda Summary Generator"
 
+    gui_scale_factor = NumericProperty(1.0)
     backend: AgendaBackend
     screen_manager: ScreenManager = ObjectProperty(None)
     csv_data: pd.DataFrame | None = None
@@ -806,6 +834,8 @@ class PacificaAgendaApp(App):
         self.config_file = os.path.join(self.user_data_dir, "pacifica_agenda_gui.json")
         self.CONF = self._load_conf()
 
+        self.gui_scale_factor = self.CONF.get("gui_scale", 1.0)
+
         # Load prompts from config, with fallback to defaults
         self.prompt_pass1 = self.CONF.get("prompt_pass1") or PROMPT_TEMPLATE_PASS1
         self.prompt_pass2 = self.CONF.get("prompt_pass2") or PROMPT_TEMPLATE_PASS2
@@ -820,6 +850,7 @@ class PacificaAgendaApp(App):
             "csv_headers": None,
             "debug": False,
             "ignore_brackets": False,
+            "gui_scale": 1.0,
         }
         try:
             with open(self.config_file, "r", encoding="utf-8") as fp:
@@ -829,6 +860,8 @@ class PacificaAgendaApp(App):
                     data["csv_headers"] = DEFAULT_CSV_HEADERS.copy()
                 if "ignore_brackets" not in data:
                     data["ignore_brackets"] = False
+                if "gui_scale" not in data:
+                    data["gui_scale"] = 1.0
                 default_conf.update(data)
         except Exception:
             # On first run or error, populate with defaults
@@ -836,6 +869,7 @@ class PacificaAgendaApp(App):
         return default_conf
 
     def _save_conf(self):
+        self.CONF["gui_scale"] = self.gui_scale_factor
         try:
             with open(self.config_file, "w", encoding="utf-8") as fp:
                 json.dump(self.CONF, fp, indent=2)
@@ -902,27 +936,28 @@ class PacificaAgendaApp(App):
 
     # ---------------------------------------------------------------- Home
     def _build_home(self):
+        scale = self.gui_scale_factor
         scr = HomeScreen(name="home")
-        root = BoxLayout(orientation="vertical", padding=40, spacing=20)
+        root = BoxLayout(orientation="vertical", padding=40 * scale, spacing=20 * scale)
         scr.add_widget(root)
 
         # logo and header container
-        logo_header = BoxLayout(orientation="horizontal", size_hint=(1, None), height=200, spacing=20)
+        logo_header = BoxLayout(orientation="horizontal", size_hint=(1, None), height=200 * scale, spacing=20 * scale)
         logo_header.add_widget(Widget(size_hint_x=1))  # add spacer to center content
         try:
             from kivy.uix.image import Image as KivyImage
             if os.path.exists("logo.png"):
-                logo = KivyImage(source="logo.png", size_hint=(None, None), size=(180, 180))
+                logo = KivyImage(source="logo.png", size_hint=(None, None), size=(180 * scale, 180 * scale))
                 logo_header.add_widget(logo)
         except Exception:
             pass
         header = Label(
             text="[b]City of Pacifica[/b]\nAgenda Summary Generator",
             markup=True,
-            font_size=36,
+            font_size=36 * scale,
             color=[0, 0, 0, 1],
             size_hint=(2, None),
-            height=180,
+            height=180 * scale,
         )
         header.halign = "center"
         header.valign = "middle"
@@ -935,7 +970,7 @@ class PacificaAgendaApp(App):
         self.upload_zone = UploadZone(self)
         root.add_widget(self.upload_zone)
 
-        nav_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=75, spacing=15)
+        nav_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=75 * scale, spacing=15 * scale)
         nav_bar.add_widget(Widget())
 
         settings_btn = StyledButton(text="Settings", size_hint=(None, None), width=220, height=75)
@@ -1003,16 +1038,17 @@ class PacificaAgendaApp(App):
 
     # ---------------------------------------------------------------- Review screen
     def _build_review(self):
+        scale = self.gui_scale_factor
         scr = ReviewScreen(name="review")
-        layout = BoxLayout(orientation="vertical", padding=20, spacing=15)
+        layout = BoxLayout(orientation="vertical", padding=20 * scale, spacing=15 * scale)
         scr.add_widget(layout)
 
-        topbar = BoxLayout(orientation="horizontal", size_hint_y=None, height=75, spacing=10)
+        topbar = BoxLayout(orientation="horizontal", size_hint_y=None, height=75 * scale, spacing=10 * scale)
         back_btn = StyledButton(text="Back", size_hint=(None, None), width=180, height=75)
         back_btn.bind(on_release=lambda *_: self._navigate_to("home"))  # use navigation method
         topbar.add_widget(back_btn)
 
-        self.review_label = Label(text="Items Selected: 0", color=[0, 0, 0, 1], font_size=50)
+        self.review_label = Label(text="Items Selected: 0", color=[0, 0, 0, 1], font_size=50 * scale)
         topbar.add_widget(self.review_label)
 
         gen_btn = StyledButton(text="Generate", size_hint=(None, None), width=240, height=75)
@@ -1026,9 +1062,9 @@ class PacificaAgendaApp(App):
         header_container = BoxLayout(
             orientation="horizontal",
             size_hint_y=None,
-            height=50,
-            padding=(20, 15), # Match AgendaItem's outer padding
-            spacing=15 # Match AgendaItem's outer spacing
+            height=50 * scale,
+            padding=(20 * scale, 15 * scale), # Match AgendaItem's outer padding
+            spacing=15 * scale # Match AgendaItem's outer spacing
         )
         with header_container.canvas.before:
             Color(*StyledButton.hex2rgba(PACIFICA_BLUE, 0.2)) # Light blue header background
@@ -1037,30 +1073,30 @@ class PacificaAgendaApp(App):
                               size=lambda inst, val: setattr(inst.canvas.before.children[-1], 'size', val))
 
         # Placeholder for checkbox column
-        header_container.add_widget(Widget(size_hint_x=None, width=40))
+        header_container.add_widget(Widget(size_hint_x=None, width=40 * scale))
 
         # Container for header labels to match AgendaItem's internal structure
         header_labels_container = BoxLayout(
             orientation="horizontal",
             size_hint_x=1,
-            spacing=COLUMN_SPACING,
-            padding=COLUMN_PAD # Match AgendaItem's internal column padding
+            spacing=15 * scale,
+            padding=10 * scale
         )
-        header_labels_container.add_widget(Label(text="Date", size_hint_x=COLUMN_SIZES["date"], halign="left", valign="middle", color=TEXT_COLOR, font_size=26, bold=True))
-        header_labels_container.add_widget(Label(text="Section", size_hint_x=COLUMN_SIZES["section"], halign="left", valign="middle", color=TEXT_COLOR, font_size=26, bold=True))
-        header_labels_container.add_widget(Label(text="Item", size_hint_x=COLUMN_SIZES["item"], halign="left", valign="middle", color=TEXT_COLOR, font_size=26, bold=True))
-        header_labels_container.add_widget(Label(text="Notes", size_hint_x=COLUMN_SIZES["notes"], halign="left", valign="middle", color=TEXT_COLOR, font_size=26, bold=True))
+        header_labels_container.add_widget(Label(text="Date", size_hint_x=COLUMN_SIZES["date"], halign="left", valign="middle", color=TEXT_COLOR, font_size=26 * scale, bold=True))
+        header_labels_container.add_widget(Label(text="Section", size_hint_x=COLUMN_SIZES["section"], halign="left", valign="middle", color=TEXT_COLOR, font_size=26 * scale, bold=True))
+        header_labels_container.add_widget(Label(text="Item", size_hint_x=COLUMN_SIZES["item"], halign="left", valign="middle", color=TEXT_COLOR, font_size=26 * scale, bold=True))
+        header_labels_container.add_widget(Label(text="Notes", size_hint_x=COLUMN_SIZES["notes"], halign="left", valign="middle", color=TEXT_COLOR, font_size=26 * scale, bold=True))
         
         layout.add_widget(header_container)
         header_container.add_widget(header_labels_container)
 
-        scroll = ScrollView(size_hint=(1, 1), scroll_distance=100, scroll_wheel_distance=150) # Increased scroll speed
+        scroll = ScrollView(size_hint=(1, 1), scroll_distance=100, scroll_wheel_distance=150 * scale) # Increased scroll speed
         self.items_container = BoxLayout(orientation='vertical', size_hint_y=None, spacing=2)
         self.items_container.bind(minimum_height=self.items_container.setter('height'))
         scroll.add_widget(self.items_container)
         layout.add_widget(scroll)
 
-        sel_bar = BoxLayout(size_hint_y=None, height=75, spacing=10)
+        sel_bar = BoxLayout(size_hint_y=None, height=75 * scale, spacing=10 * scale)
         sel_all = StyledButton(text="Select All", size_hint=(None, None), width=220, height=75)
         sel_all.bind(on_release=lambda *_: self._select_all_items(True))
         sel_bar.add_widget(sel_all)
@@ -1142,11 +1178,12 @@ class PacificaAgendaApp(App):
 
     # ---------------------------------------------------------------- Generation screen
     def _build_generation(self):
+        scale = self.gui_scale_factor
         scr = GenerationScreen(name="generation")
-        layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
+        layout = BoxLayout(orientation="vertical", padding=10 * scale, spacing=10 * scale)
         scr.add_widget(layout)
 
-        top = BoxLayout(orientation="horizontal", size_hint_y=None, height=75, spacing=10)
+        top = BoxLayout(orientation="horizontal", size_hint_y=None, height=75 * scale, spacing=10 * scale)
         self.back_gen_btn = StyledButton(text="Back", size_hint=(None, None), width=180, height=75)
         self.back_gen_btn.bind(on_release=lambda *_: self._cancel_generation())
         top.add_widget(self.back_gen_btn)
@@ -1161,7 +1198,7 @@ class PacificaAgendaApp(App):
 
         # A container for all generation-related outputs that will take up the remaining space
         # Make this an instance variable
-        self.generation_area = BoxLayout(orientation='vertical', spacing=10)
+        self.generation_area = BoxLayout(orientation='vertical', spacing=10 * scale)
         layout.add_widget(self.generation_area)
 
         # --- Main Generation Output Area ---
@@ -1170,14 +1207,14 @@ class PacificaAgendaApp(App):
 
         self.gen_output = TextInput(
             readonly=True,
-            font_size=28,
+            font_size=28 * scale,
             foreground_color=[0, 0, 0, 1],
             background_color=[1, 1, 1, 1],
             size_hint_y=None,
         )
         self.gen_output.bind(minimum_height=self.gen_output.setter('height'))
 
-        self.sv_gen_output = ScrollView(scroll_wheel_distance=50)
+        self.sv_gen_output = ScrollView(scroll_wheel_distance=50 * scale)
         self.sv_gen_output.add_widget(self.gen_output)
         self.sv_gen_output.bind(on_scroll_stop=self._on_scroll_stop)
         self.gen_output_container.add_widget(self.sv_gen_output)
@@ -1188,15 +1225,15 @@ class PacificaAgendaApp(App):
         self.gen_output_container.size_hint_y = 1.0
         self.generation_area.add_widget(self.gen_output_container)
 
-        self.debug_container = BoxLayout(orientation='vertical', size_hint_y=0.5, spacing=5)
+        self.debug_container = BoxLayout(orientation='vertical', size_hint_y=0.5, spacing=5 * scale)
         
         debug_title = Label(
             text="[b]Debug Console[/b]",
             markup=True,
             size_hint_y=None,
-            height=30,
+            height=30 * scale,
             color=TEXT_COLOR,
-            font_size=20
+            font_size=20 * scale
         )
         self.debug_container.add_widget(debug_title)
 
@@ -1205,11 +1242,11 @@ class PacificaAgendaApp(App):
             size_hint_y=None,
             background_color=[0.1, 0.1, 0.1, 1],
             foreground_color=[0.8, 1.0, 0.8, 1],
-            font_size=14
+            font_size=14 * scale
         )
         self.debug_console.bind(minimum_height=self.debug_console.setter('height'))
 
-        self.sv_debug = ScrollView(scroll_wheel_distance=50)
+        self.sv_debug = ScrollView(scroll_wheel_distance=50 * scale)
         self.sv_debug.add_widget(self.debug_console)
         self.sv_debug.bind(on_scroll_stop=self._on_scroll_stop)
         self.debug_container.add_widget(self.sv_debug)
@@ -1250,21 +1287,22 @@ class PacificaAgendaApp(App):
 
     # ---------------------------------------------------------------- Settings
     def _build_settings(self):
+        scale = self.gui_scale_factor
         scr = SettingsScreen(name="settings")
-        root = BoxLayout(orientation="vertical", padding=20, spacing=20)
+        root = BoxLayout(orientation="vertical", padding=20 * scale, spacing=20 * scale)
         scr.add_widget(root)
 
-        title = Label(text="[b]Settings[/b]", markup=True, font_size=48, size_hint_y=None, height=80, color=[0, 0, 0, 1])  # increased font size and height
+        title = Label(text="[b]Settings[/b]", markup=True, font_size=48 * scale, size_hint_y=None, height=80 * scale, color=[0, 0, 0, 1])
         root.add_widget(title)
 
-        grid = GridLayout(cols=2, rows=5, row_force_default=True, row_default_height=75, spacing=(10,10), size_hint_y=None)
+        grid = GridLayout(cols=2, rows=6, row_force_default=True, row_default_height=75 * scale, spacing=(10 * scale,10 * scale), size_hint_y=None)
         grid.bind(minimum_height=grid.setter('height'))
 
         # Model row
         label_model = Label(
             text="Model",
             color=[0, 0, 0, 1],
-            font_size=28,
+            font_size=28 * scale,
             bold=True,
             halign='left',
             valign='middle',
@@ -1275,7 +1313,7 @@ class PacificaAgendaApp(App):
             text="Checking...",
             color=[0, 0, 0, 1],
             halign='left',
-            font_size=28
+            font_size=28 * scale
         )
         self.model_status_lbl.bind(size=lambda inst, *_: inst.setter('text_size')(inst, (inst.width, None)))
         self.install_model_btn = StyledButton(
@@ -1285,7 +1323,7 @@ class PacificaAgendaApp(App):
             height=75
         )
         self.install_model_btn.bind(on_release=lambda *_: self._install_model())
-        control_model = BoxLayout(orientation="horizontal", spacing=10, size_hint_x=0.7)
+        control_model = BoxLayout(orientation="horizontal", spacing=10 * scale, size_hint_x=0.7)
         control_model.add_widget(self.model_status_lbl)
         control_model.add_widget(self.install_model_btn)
         grid.add_widget(label_model)
@@ -1295,7 +1333,7 @@ class PacificaAgendaApp(App):
         label_prompts = Label(
             text="Prompt Templates",
             color=[0, 0, 0, 1],
-            font_size=28,
+            font_size=28 * scale,
             bold=True,
             halign='left',
             valign='middle',
@@ -1306,7 +1344,7 @@ class PacificaAgendaApp(App):
         edit_p1_btn.bind(on_release=lambda *_: self._open_prompt_editor("pass1"))
         edit_p2_btn = StyledButton(text="Edit Pass 2 Prompt", size_hint_x=None, width=300)
         edit_p2_btn.bind(on_release=lambda *_: self._open_prompt_editor("pass2"))
-        control_prompts = BoxLayout(orientation="horizontal", spacing=10, size_hint_x=0.7)
+        control_prompts = BoxLayout(orientation="horizontal", spacing=10 * scale, size_hint_x=0.7)
         control_prompts.add_widget(edit_p1_btn)
         control_prompts.add_widget(edit_p2_btn)
         grid.add_widget(label_prompts)
@@ -1316,7 +1354,7 @@ class PacificaAgendaApp(App):
         label_headers = Label(
             text="CSV Column Required Header Names",
             color=[0, 0, 0, 1],
-            font_size=28,
+            font_size=28 * scale,
             bold=True,
             halign='left',
             valign='middle',
@@ -1324,7 +1362,7 @@ class PacificaAgendaApp(App):
         )
         label_headers.bind(size=lambda inst, *_: inst.setter('text_size')(inst, (inst.width, None)))
         
-        control_headers = BoxLayout(orientation="horizontal", spacing=5, size_hint_x=0.7)
+        control_headers = BoxLayout(orientation="horizontal", spacing=5 * scale, size_hint_x=0.7)
         
         # Create buttons for each header. Use smaller font size to fit and set fixed width.
         btn_h_date = StyledButton(text="Date", font_size=22, size_hint_x=None, width=150, on_release=lambda *_: self._open_header_editor("date", "Meeting Date Header"))
@@ -1347,7 +1385,7 @@ class PacificaAgendaApp(App):
         label_debug = Label(
             text="Debug Mode",
             color=[0, 0, 0, 1],
-            font_size=28,
+            font_size=28 * scale,
             bold=True,
             halign='left',
             valign='middle',
@@ -1361,7 +1399,7 @@ class PacificaAgendaApp(App):
             width=320, # Wider to fit "Debug Mode Disabled"
             height=75
         )
-        control_debug = BoxLayout(orientation="horizontal", spacing=10, size_hint_x=0.7)
+        control_debug = BoxLayout(orientation="horizontal", spacing=10 * scale, size_hint_x=0.7)
         control_debug.add_widget(debug_toggle_btn)
         control_debug.add_widget(Widget()) # Add a spacer to push button to left if control_debug takes more space
         grid.add_widget(label_debug)
@@ -1371,7 +1409,7 @@ class PacificaAgendaApp(App):
         label_brackets = Label(
             text="Ignore Bracketed Text []",
             color=[0, 0, 0, 1],
-            font_size=28,
+            font_size=28 * scale,
             bold=True,
             halign='left',
             valign='middle',
@@ -1387,18 +1425,72 @@ class PacificaAgendaApp(App):
             text_on="Ignoring Brackets",
             text_off="Not Ignoring Brackets"
         )
-        control_brackets = BoxLayout(orientation="horizontal", spacing=10, size_hint_x=0.7)
+        control_brackets = BoxLayout(orientation="horizontal", spacing=10 * scale, size_hint_x=0.7)
         control_brackets.add_widget(brackets_toggle_btn)
         control_brackets.add_widget(Widget())
         grid.add_widget(label_brackets)
         grid.add_widget(control_brackets)
+        
+        # GUI Scale row
+        label_scale = Label(
+            text="GUI Scale Factor",
+            color=[0, 0, 0, 1],
+            font_size=28 * scale,
+            bold=True,
+            halign='left',
+            valign='middle',
+            size_hint_x=0.3
+        )
+        label_scale.bind(size=lambda inst, *_: inst.setter('text_size')(inst, (inst.width, None)))
+        
+        self.scale_input = TextInput(
+            text=str(self.gui_scale_factor),
+            size_hint=(None, None),
+            width=100 * scale,
+            height=50 * scale,
+            font_size=24 * scale,
+            multiline=False
+        )
+
+        # Create a wrapper layout to center the TextInput
+        scale_input_wrapper = RelativeLayout(
+            size_hint=(None, 1), # Take full height of the row, use fixed width
+            width=self.scale_input.width
+        )
+        self.scale_input.pos_hint = {'center_y': 0.5}
+        scale_input_wrapper.add_widget(self.scale_input)
+        
+        set_scale_btn = StyledButton(
+            text="Set Scale",
+            size_hint=(None, None),
+            width=180,
+            height=75
+        )
+        set_scale_btn.bind(on_release=lambda *_: self._set_gui_scale())
+
+        reset_scale_btn = StyledButton(
+            text="Reset",
+            size_hint=(None, None),
+            width=180,
+            height=75
+        )
+        reset_scale_btn.bind(on_release=lambda *_: self._set_gui_scale(reset=True))
+
+        control_scale = BoxLayout(orientation="horizontal", spacing=10 * scale, size_hint_x=0.7)
+        control_scale.add_widget(scale_input_wrapper)
+        control_scale.add_widget(set_scale_btn)
+        control_scale.add_widget(reset_scale_btn)
+        control_scale.add_widget(Widget())
+
+        grid.add_widget(label_scale)
+        grid.add_widget(control_scale)
 
         root.add_widget(grid)
     
         # NEW: Add a flexible spacer to push content to the top and leave space at the bottom
         root.add_widget(Widget())
     
-        btn_bar = BoxLayout(size_hint_y=None, height=75, spacing=10)
+        btn_bar = BoxLayout(size_hint_y=None, height=75 * scale, spacing=10 * scale)
         back_btn = StyledButton(text="Back", size_hint=(None, None), width=180, height=75)
         back_btn.bind(on_release=lambda *_: self._navigate_to("home"))
 
@@ -1417,6 +1509,58 @@ class PacificaAgendaApp(App):
 
         root.add_widget(btn_bar)
         self.screen_manager.add_widget(scr)
+
+    def _set_gui_scale(self, reset=False):
+        if reset:
+            new_scale = 1.0
+        else:
+            try:
+                new_scale = float(self.scale_input.text)
+                if new_scale <= 0:
+                    raise ValueError("Scale must be positive")
+                if new_scale > 3.0:
+                    self._show_error("Invalid Scale", "GUI scale factor cannot exceed 3.0.")
+                    return
+            except (ValueError, TypeError):
+                self._show_error("Invalid Scale", "Please enter a valid positive number for the scale factor (e.g., 1.0 or 1.2).")
+                return
+
+        self.gui_scale_factor = new_scale
+        self._save_conf()
+        self._rebuild_ui()
+
+    def _rebuild_ui(self):
+        """
+        Clears and rebuilds the entire UI to apply scaling changes.
+        Preserves essential state like loaded CSV data.
+        """
+        # Store current screen to return to it after rebuild
+        current_screen = self.screen_manager.current
+        
+        # Clear all widgets from all screens, and the screen manager itself
+        for screen in self.screen_manager.screens:
+            screen.clear_widgets()
+        self.screen_manager.clear_widgets()
+
+        # Re-build all screens with the new scale factor
+        self._build_home()
+        self._build_review()
+        self._build_generation()
+        self._build_settings()
+        self._build_help()
+        self._build_credits()
+        
+        # Restore necessary state
+        self._update_model_status()
+        self._update_debug_console_visibility(self.CONF["debug"])
+        self._update_home_screen_ui()
+        if self.filtered_items:
+             self._populate_review_list()
+        
+        # Return to the screen the user was on
+        self.screen_manager.current = "home" # Go home first to avoid visual glitches
+        self.screen_manager.current = current_screen
+        self._show_info("GUI Scale Updated", "UI has been rescaled.")
 
     # pickers
     @mainthread
@@ -1712,26 +1856,27 @@ class PacificaAgendaApp(App):
 
     # ---------------------------------------------------------------- Help & Credits
     def _build_help(self):
+        scale = self.gui_scale_factor
         scr = HelpScreen(name="help")
         # When this screen is about to be shown, update the help text
         scr.bind(on_pre_enter=self._update_help_text)
-        root = BoxLayout(orientation="vertical", padding=20, spacing=20)
+        root = BoxLayout(orientation="vertical", padding=20 * scale, spacing=20 * scale)
         scr.add_widget(root)
         
         # title with back button
-        header = BoxLayout(orientation="horizontal", size_hint_y=None, height=85, spacing=10)
+        header = BoxLayout(orientation="horizontal", size_hint_y=None, height=85 * scale, spacing=10 * scale)
         back_btn = StyledButton(text="Back", size_hint=(None, None), width=180, height=75)
         back_btn.bind(on_release=lambda *_: self._navigate_to("home"))
         header.add_widget(back_btn)
         
-        title = Label(text="[b]Help & Instructions[/b]", markup=True, font_size=50, color=[0, 0, 0, 1])
+        title = Label(text="[b]Help & Instructions[/b]", markup=True, font_size=50 * scale, color=[0, 0, 0, 1])
         header.add_widget(title)
-        header.add_widget(Widget(size_hint=(None, None), width=150))  # spacer to balance title
+        header.add_widget(Widget(size_hint=(None, None), width=150 * scale))  # spacer to balance title
         root.add_widget(header)
         
         # scrollable content
         scroll = ScrollView()
-        content = BoxLayout(orientation="vertical", spacing=15, size_hint_y=None, padding=20)
+        content = BoxLayout(orientation="vertical", spacing=15 * scale, size_hint_y=None, padding=20 * scale)
         content.bind(minimum_height=content.setter('height'))
         
         # Create the label but don't set its text yet. _update_help_text will do it.
@@ -1810,12 +1955,13 @@ class PacificaAgendaApp(App):
             self.help_label.text = help_text
 
     def _build_credits(self):
+        scale = self.gui_scale_factor
         scr = CreditsScreen(name="credits")
-        root = BoxLayout(orientation="vertical", padding=20, spacing=10)
+        root = BoxLayout(orientation="vertical", padding=20 * scale, spacing=10 * scale)
         scr.add_widget(root)
 
         # build header with back button and centered title
-        header = BoxLayout(orientation="horizontal", size_hint_y=None, height=85, spacing=20)
+        header = BoxLayout(orientation="horizontal", size_hint_y=None, height=85 * scale, spacing=20 * scale)
         back_btn = StyledButton(text="Back", size_hint=(None, None), width=180, height=75)
         back_btn.bind(on_release=lambda *_: self._navigate_to("home"))
         header.add_widget(back_btn)
@@ -1823,7 +1969,7 @@ class PacificaAgendaApp(App):
         title = Label(
             text="[b]About & Credits[/b]",
             markup=True,
-            font_size=50,
+            font_size=50 * scale,
             color=[0, 0, 0, 1],
             halign="center",
             valign="middle"
@@ -1832,7 +1978,7 @@ class PacificaAgendaApp(App):
         header.add_widget(title)
         
         # add a spacer to balance the back button, keeping title centered
-        header.add_widget(Widget(size_hint=(None, None), width=150))
+        header.add_widget(Widget(size_hint=(None, None), width=150 * scale))
         root.add_widget(header)
 
         # scrollable area for the main content
@@ -1843,7 +1989,7 @@ class PacificaAgendaApp(App):
         # Spacer above the content
         aligner_layout.add_widget(Widget())
 
-        content = BoxLayout(orientation="vertical", spacing=15, size_hint_y=None, padding=(20, 0)) # Removed vertical padding here, using aligner_layout instead
+        content = BoxLayout(orientation="vertical", spacing=15 * scale, size_hint_y=None, padding=(20 * scale, 0)) # Removed vertical padding here, using aligner_layout instead
         content.bind(minimum_height=content.setter('height'))
         
         aligner_layout.add_widget(content)
@@ -1856,9 +2002,10 @@ class PacificaAgendaApp(App):
 
         # helper to add a centered label with wrapping
         def add_centered(text, fs, bold=False):
+            fs = fs * scale
             formatted_text = f"[b]{text}[/b]" if bold else text
             lbl = Label(
-                text=f"[size={fs}]{formatted_text}[/size]",
+                text=f"[size={int(fs)}]{formatted_text}[/size]",
                 markup=True,
                 font_size=fs,
                 color=[0, 0, 0, 1],
@@ -1871,29 +2018,29 @@ class PacificaAgendaApp(App):
                 texture_size=lambda inst, size: setattr(inst, "height", size[1]),
             )
             content.add_widget(lbl)
-            content.add_widget(Widget(size_hint_y=None, height=5)) # reduced spacing
+            content.add_widget(Widget(size_hint_y=None, height=5 * scale)) # reduced spacing
 
         # Add logo similar to home screen
         try:
             from kivy.uix.image import Image as KivyImage
             if os.path.exists("logo.png"):
-                logo_container = BoxLayout(orientation="horizontal", size_hint=(1, None), height=220) # slightly taller to accommodate padding
+                logo_container = BoxLayout(orientation="horizontal", size_hint=(1, None), height=220 * scale) # slightly taller to accommodate padding
                 logo_container.add_widget(Widget(size_hint_x=1))  # spacer for centering
-                logo = KivyImage(source="logo.png", size_hint=(None, None), size=(200, 200)) # Larger square size
+                logo = KivyImage(source="logo.png", size_hint=(None, None), size=(200 * scale, 200 * scale)) # Larger square size
                 logo_container.add_widget(logo)
                 logo_container.add_widget(Widget(size_hint_x=1))  # spacer for centering
                 content.add_widget(logo_container)
-                content.add_widget(Widget(size_hint_y=None, height=20)) # spacing after logo
+                content.add_widget(Widget(size_hint_y=None, height=20 * scale)) # spacing after logo
         except Exception:
             pass
 
         # app title
         add_centered("City of Pacifica\nAgenda Summary Generator", 46, bold=True)
-        content.add_widget(Widget(size_hint_y=None, height=15))
+        content.add_widget(Widget(size_hint_y=None, height=15 * scale))
         
         # version
         add_centered("Version 3.0 - Kivy Overhaul", 38, bold=True)
-        content.add_widget(Widget(size_hint_y=None, height=15))
+        content.add_widget(Widget(size_hint_y=None, height=15 * scale))
 
         # description
         add_centered(
@@ -1902,11 +2049,11 @@ class PacificaAgendaApp(App):
             "for executive review and public transparency.",
             28,
         )
-        content.add_widget(Widget(size_hint_y=None, height=20))
+        content.add_widget(Widget(size_hint_y=None, height=20 * scale))
 
         # development team header
         add_centered("Development Team", 36, bold=True)
-        content.add_widget(Widget(size_hint_y=None, height=15))
+        content.add_widget(Widget(size_hint_y=None, height=15 * scale))
 
         # team details
         add_centered(
@@ -1914,7 +2061,7 @@ class PacificaAgendaApp(App):
             "Project Coordination: [b]Madeleine Hur[/b]",
             30,
         )
-        content.add_widget(Widget(size_hint_y=None, height=20))
+        content.add_widget(Widget(size_hint_y=None, height=20 * scale))
         
         add_centered(
             "Built with Python, Kivy, and local LLMs.\n"
@@ -2189,14 +2336,14 @@ class PacificaAgendaApp(App):
 
     # ---------------------------------------------------------------- Alerts
     @mainthread
-    def _show_error(self, title, msg, markup=False):
+    def _show_error(self, title, msg, markup=False, *args):
         content = Label(text=msg, markup=markup, halign="center")
         popup = Popup(title=title, content=content, size_hint=(0.8, 0.5))
         content.bind(width=lambda *x: content.setter('text_size')(content, (content.width, None)))
         popup.open()
 
     @mainthread
-    def _show_info(self, msg):
+    def _show_info(self, msg, *args):
         content = Label(text=msg, halign="center")
         popup = Popup(title="Info", content=content, size_hint=(0.6, 0.4))
         content.bind(width=lambda *x: content.setter('text_size')(content, (content.width, None)))

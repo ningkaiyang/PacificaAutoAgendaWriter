@@ -41,7 +41,7 @@ def logical_cores() -> int:
 
 
 def default_threads() -> int:
-    return max(1, logical_cores() - 3)
+    return max(1, logical_cores() - 4)
 
 
 @contextlib.contextmanager
@@ -518,7 +518,7 @@ class AgendaBackend:
                 think_streamer.done()
 
                 if token_cb:  # if user gui display, then print a newline between
-                    token_cb("\n")
+                    token_cb("\n\n")
 
                 # Clean up summarized_items to remove any incomplete thinking tags
                 # and extract only the actual bullet point content
