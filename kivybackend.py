@@ -41,7 +41,7 @@ def logical_cores() -> int:
 
 
 def default_threads() -> int:
-    return max(1, logical_cores() // 2)
+    return max(1, logical_cores() - 1)
 
 
 @contextlib.contextmanager
@@ -300,7 +300,7 @@ class AgendaBackend:
                         n_ctx=10000,
                         n_threads=default_threads(),
                         verbose=False,
-                        n_gpu_layers=-1,
+                        n_gpu_layers=-1
                     )
             except Exception as exc:
                 traceback.print_exc()
@@ -516,6 +516,9 @@ class AgendaBackend:
                     raw_summary += token
                     think_streamer(chunk)  # count tokens and print for debug
                 think_streamer.done()
+
+                if token_cb:  # if user gui display, then print a newline between
+                    token_cb("\n")
 
                 # Clean up summarized_items to remove any incomplete thinking tags
                 # and extract only the actual bullet point content

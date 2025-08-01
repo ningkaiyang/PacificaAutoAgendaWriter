@@ -10,6 +10,20 @@ APP_NAME = "AutoAgendaWriter"
 ENTRY_POINT = "kivyfrontend.py"
 ICON_FILE = "logo.ico"
 
+def find_llama_cpp_lib():
+    """find the path to llama_cpp's shared library."""
+    try:
+        import llama_cpp
+        package_path = Path(llama_cpp.__file__).parent
+        lib_path = package_path / "lib"
+        if lib_path.is_dir():
+            print(f"Found llama_cpp lib at: {lib_path}")
+            return str(lib_path)
+    except (ImportError, AttributeError):
+        pass
+    print("Warning: Could not find llama_cpp lib path. The build may fail.")
+    return None
+
 def find_kivy_hooks():
     """Find the path to Kivy's PyInstaller hooks."""
     try:
@@ -29,6 +43,9 @@ def main():
     
     # Kivy hooks are essential for a successful build
     kivy_hooks_path = find_kivy_hooks()
+
+    # Find and add the llama_cpp library
+    llama_lib_path = find_llama_cpp_lib()
 
     # Define PyInstaller arguments
     pyinstaller_args = [
@@ -70,6 +87,7 @@ def main():
         '--hidden-import', 'pandas',
         '--hidden-import', 'huggingface_hub',
         '--hidden-import', 'docx',
+        '--hidden-import', 'llama_cpp',
         
         # --- Entry point script ---
         ENTRY_POINT
@@ -78,6 +96,11 @@ def main():
     # Add Kivy hooks path to the command
     if kivy_hooks_path:
         pyinstaller_args.extend(['--additional-hooks-dir', kivy_hooks_path])
+
+    # Add llama_cpp lib path to the command
+    if llama_lib_path:
+        # we want to place the lib folder inside a 'llama_cpp' folder in the bundle
+        pyinstaller_args.extend(['--add-data', f'{llama_lib_path}{os.pathsep}llama_cpp/lib'])
 
     print("--- Starting PyInstaller Build ---")
     print(f"App Name: {APP_NAME}")

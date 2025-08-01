@@ -845,8 +845,8 @@ class PacificaAgendaApp(App):
     def build(self):
         Window.clearcolor = StyledButton.hex2rgba(PACIFICA_SAND, 1)
         Window.size = (1280, 720)  # set default window size
-        Window.left = (Window.system_size[0] - Window.width + 500) / 2
-        Window.top = (Window.system_size[1] - Window.height + 700) / 2
+        Window.left = (Window.system_size[0] - Window.width) / 2
+        Window.top = (Window.system_size[1] - Window.height + 100) / 2
         
         self.backend = AgendaBackend(
             model_path=self.CONF["model_path"],
