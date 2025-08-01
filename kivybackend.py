@@ -41,7 +41,7 @@ def logical_cores() -> int:
 
 
 def default_threads() -> int:
-    return max(1, logical_cores() - 1)
+    return max(1, logical_cores() - 3)
 
 
 @contextlib.contextmanager
