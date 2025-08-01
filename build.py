@@ -82,6 +82,8 @@ def main():
         # Plyer and platform-specific backends
         '--hidden-import', 'plyer.platforms.win.notification',
         '--hidden-import', 'plyer.platforms.win.filechooser',
+        '--hidden-import', 'win10toast',
+        '--hidden-import', 'plyer.platforms.win.libs.balloontip',
 
         # Other dependencies
         '--hidden-import', 'pandas',
