@@ -724,8 +724,8 @@ class AgendaBackend:
         doc.add_paragraph()
         
         # Significant items section
-        last_report_date = (datetime.now() - pd.Timedelta(days=60)).strftime("%B %d, %Y")
-        sig_items = doc.add_paragraph(f"Significant Items Completed Since {last_report_date}:")
+        last_report_date = (datetime.now() - pd.Timedelta(days=60)).strftime("%B")
+        sig_items = doc.add_paragraph(f"Significant Items Completed Since {last_report_date} (2 months ago placeholder):")
         sig_items.runs[0].bold = True
         doc.add_paragraph("[Placeholder for user to manually enter items.]")
         
