@@ -879,8 +879,6 @@ class PacificaAgendaApp(App):
     def build(self):
         Window.clearcolor = StyledButton.hex2rgba(PACIFICA_SAND, 1)
         Window.size = (1280, 720)  # set default window size
-        Window.left = (Window.system_size[0] - Window.width) / 2
-        Window.top = (Window.system_size[1] - Window.height + 100) / 2
         
         self.backend = AgendaBackend(
             model_path=self.CONF["model_path"],
@@ -909,6 +907,19 @@ class PacificaAgendaApp(App):
             Window.bind(on_dropfile=self._on_file_drop)
 
         return self.screen_manager
+
+    def on_start(self):
+        """this is called after build() and the window is created, so we can center it"""
+        try:
+            # now system_size should be available
+            desktop_width, desktop_height = Window.system_size
+            window_width, window_height = Window.size
+            
+            # calculate the position and set it
+            Window.left = 100
+            Window.top = 100
+        except Exception as e:
+            print(f"could not center window: {e}")
 
     def _navigate_to(self, screen_name: str):
         """navigate to a screen with proper slide direction"""
