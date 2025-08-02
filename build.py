@@ -9,6 +9,8 @@ from pathlib import Path
 APP_NAME = "AutoAgendaWriter"
 ENTRY_POINT = "kivyfrontend.py"
 ICON_FILE = "logo.ico"
+# set to False for a final release build
+DEBUG_MODE = False  # okay, time for the final build, no more console
 
 def clean_previous_build():
     # a good practice to clean up old files before a new build
@@ -25,8 +27,11 @@ def find_llama_cpp_lib():
     try:
         import llama_cpp
         package_path = Path(llama_cpp.__file__).parent
-        # the library is usually in a 'lib' subfolder
+        # the library is usually in a 'lib' subfolder or 'llamacpp/lib'
         lib_path = package_path / "lib"
+        if not lib_path.is_dir():
+            lib_path = package_path / "llamacpp" / "lib"
+
         if lib_path.is_dir():
             print(f"Found llama_cpp lib at: {lib_path}")
             return str(lib_path)
@@ -85,16 +90,28 @@ def main():
     pyinstaller_args = [
         '--name', APP_NAME,
         '--onefile',
-        '--windowed',  # hides the console window on release builds
         f'--icon={ICON_FILE}',
+        '--log-level', 'INFO',  # okay lets add more logging to see what's up
+    ]
 
-        # --- Add data files ---
-        # pyinstaller's --add-data format is 'source:dest_in_bundle'
-        # on windows, the separator is ';', on others it's ':'
+    # lets switch between console and windowed mode
+    if DEBUG_MODE:
+        print("--- Building in DEBUG mode (console window will be visible) ---")
+        pyinstaller_args.append('--console')
+    else:
+        print("--- Building in RELEASE mode (no console window) ---")
+        pyinstaller_args.append('--windowed')
+
+
+    # --- Add data files ---
+    # pyinstaller's --add-data format is 'source;dest_in_bundle' on windows
+    pyinstaller_args.extend([
         '--add-data', f'logo.png{os.pathsep}.',
         '--add-data', f'notification.wav{os.pathsep}.',
+    ])
 
-        # --- Add hidden imports that PyInstaller might miss ---
+    # --- Add hidden imports that PyInstaller might miss ---
+    pyinstaller_args.extend([
         '--hidden-import', 'kivy.app',
         '--hidden-import', 'kivy.uix.boxlayout',
         '--hidden-import', 'kivy.uix.button',
@@ -111,6 +128,16 @@ def main():
         '--hidden-import', 'kivy.graphics.texture',
         '--hidden-import', 'kivy.graphics.vertex_instructions',
         '--hidden-import', 'kivy.properties',
+        # okay so the error says it can't find an image provider
+        # let's explicitly tell pyinstaller to grab them
+        '--hidden-import', 'kivy.core.image.img_pil',
+        '--hidden-import', 'kivy.core.image.img_sdl2',
+        # let's also grab the audio and text providers just in case
+        # the app uses sound and custom fonts, so these are likely needed
+        '--hidden-import', 'kivy.core.audio.audio_sdl2',
+        '--hidden-import', 'kivy.core.text.text_sdl2',
+        # the new error says it can't find a window provider, so let's add that too
+        '--hidden-import', 'kivy.core.window.window_sdl2',
         '--hidden-import', 'plyer.platforms.win.notification',
         '--hidden-import', 'plyer.platforms.win.filechooser',
         '--hidden-import', 'win10toast',
@@ -119,10 +146,29 @@ def main():
         '--hidden-import', 'huggingface_hub',
         '--hidden-import', 'docx',
         '--hidden-import', 'llama_cpp',
-        
-        # --- Entry point script ---
-        ENTRY_POINT
-    ]
+        # python-docx needs lxml, and pyinstaller can miss this part
+        '--hidden-import', 'lxml._elementpath',
+        # llama-cpp-python uses diskcache, let's make sure it's included
+        '--hidden-import', 'diskcache',
+    ])
+    
+    # okay let's exclude modules we know we don't need
+    # this should clean up the camera and gstreamer warnings in the log
+    # the app log also says it ignores some of these, so let's be explicit
+    pyinstaller_args.extend([
+        '--exclude-module', 'kivy.core.camera.camera_picamera',
+        '--exclude-module', 'kivy.core.camera.camera_gi',
+        '--exclude-module', 'kivy.core.camera.camera_opencv',
+        '--exclude-module', 'kivy.lib.gstplayer',
+        '--exclude-module', 'kivy.core.video.video_ffmpeg',
+        '--exclude-module', 'kivy.core.video.video_ffpyplayer',
+        '--exclude-module', 'kivy.core.audio.audio_ffpyplayer',
+        '--exclude-module', 'kivy.core.image.img_tex',
+        '--exclude-module', 'kivy.core.image.img_dds',
+    ])
+    
+    # --- Entry point script ---
+    pyinstaller_args.append(ENTRY_POINT)
 
     # add kivy hooks path to the command if found
     if kivy_hooks_path:
@@ -130,8 +176,8 @@ def main():
 
     # add llama_cpp lib path to the command if found
     if llama_lib_path:
-        # we want to place the lib folder inside a 'llama_cpp' folder in the bundle
-        pyinstaller_args.extend(['--add-data', f'{llama_lib_path}{os.pathsep}llama_cpp/lib'])
+        # for libraries, --add-binary is often more reliable than --add-data
+        pyinstaller_args.extend(['--add-binary', f'{llama_lib_path}{os.pathsep}llama_cpp/lib'])
 
     print("--- Starting PyInstaller Build ---")
     print(f"App Name: {APP_NAME}")
