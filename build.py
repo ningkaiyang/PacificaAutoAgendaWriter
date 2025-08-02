@@ -10,7 +10,7 @@ APP_NAME = "AutoAgendaWriter"
 ENTRY_POINT = "kivyfrontend.py"
 ICON_FILE = "logo.ico"
 # set to False for a final release build
-DEBUG_MODE = True  #  i'm setting this to true so we can see the error
+DEBUG_MODE = False  # okay, time for the final build, no more console
 
 def clean_previous_build():
     # a good practice to clean up old files before a new build
@@ -91,6 +91,7 @@ def main():
         '--name', APP_NAME,
         '--onefile',
         f'--icon={ICON_FILE}',
+        '--log-level', 'INFO',  # okay lets add more logging to see what's up
     ]
 
     # lets switch between console and windowed mode
@@ -127,6 +128,16 @@ def main():
         '--hidden-import', 'kivy.graphics.texture',
         '--hidden-import', 'kivy.graphics.vertex_instructions',
         '--hidden-import', 'kivy.properties',
+        # okay so the error says it can't find an image provider
+        # let's explicitly tell pyinstaller to grab them
+        '--hidden-import', 'kivy.core.image.img_pil',
+        '--hidden-import', 'kivy.core.image.img_sdl2',
+        # let's also grab the audio and text providers just in case
+        # the app uses sound and custom fonts, so these are likely needed
+        '--hidden-import', 'kivy.core.audio.audio_sdl2',
+        '--hidden-import', 'kivy.core.text.text_sdl2',
+        # the new error says it can't find a window provider, so let's add that too
+        '--hidden-import', 'kivy.core.window.window_sdl2',
         '--hidden-import', 'plyer.platforms.win.notification',
         '--hidden-import', 'plyer.platforms.win.filechooser',
         '--hidden-import', 'win10toast',
@@ -135,6 +146,25 @@ def main():
         '--hidden-import', 'huggingface_hub',
         '--hidden-import', 'docx',
         '--hidden-import', 'llama_cpp',
+        # python-docx needs lxml, and pyinstaller can miss this part
+        '--hidden-import', 'lxml._elementpath',
+        # llama-cpp-python uses diskcache, let's make sure it's included
+        '--hidden-import', 'diskcache',
+    ])
+    
+    # okay let's exclude modules we know we don't need
+    # this should clean up the camera and gstreamer warnings in the log
+    # the app log also says it ignores some of these, so let's be explicit
+    pyinstaller_args.extend([
+        '--exclude-module', 'kivy.core.camera.camera_picamera',
+        '--exclude-module', 'kivy.core.camera.camera_gi',
+        '--exclude-module', 'kivy.core.camera.camera_opencv',
+        '--exclude-module', 'kivy.lib.gstplayer',
+        '--exclude-module', 'kivy.core.video.video_ffmpeg',
+        '--exclude-module', 'kivy.core.video.video_ffpyplayer',
+        '--exclude-module', 'kivy.core.audio.audio_ffpyplayer',
+        '--exclude-module', 'kivy.core.image.img_tex',
+        '--exclude-module', 'kivy.core.image.img_dds',
     ])
     
     # --- Entry point script ---
