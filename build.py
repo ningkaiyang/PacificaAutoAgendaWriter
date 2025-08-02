@@ -9,6 +9,8 @@ from pathlib import Path
 APP_NAME = "AutoAgendaWriter"
 ENTRY_POINT = "kivyfrontend.py"
 ICON_FILE = "logo.ico"
+# set to False for a final release build
+DEBUG_MODE = True  #  i'm setting this to true so we can see the error
 
 def clean_previous_build():
     # a good practice to clean up old files before a new build
@@ -25,8 +27,11 @@ def find_llama_cpp_lib():
     try:
         import llama_cpp
         package_path = Path(llama_cpp.__file__).parent
-        # the library is usually in a 'lib' subfolder
+        # the library is usually in a 'lib' subfolder or 'llamacpp/lib'
         lib_path = package_path / "lib"
+        if not lib_path.is_dir():
+            lib_path = package_path / "llamacpp" / "lib"
+
         if lib_path.is_dir():
             print(f"Found llama_cpp lib at: {lib_path}")
             return str(lib_path)
@@ -85,16 +90,27 @@ def main():
     pyinstaller_args = [
         '--name', APP_NAME,
         '--onefile',
-        '--windowed',  # hides the console window on release builds
         f'--icon={ICON_FILE}',
+    ]
 
-        # --- Add data files ---
-        # pyinstaller's --add-data format is 'source:dest_in_bundle'
-        # on windows, the separator is ';', on others it's ':'
+    # lets switch between console and windowed mode
+    if DEBUG_MODE:
+        print("--- Building in DEBUG mode (console window will be visible) ---")
+        pyinstaller_args.append('--console')
+    else:
+        print("--- Building in RELEASE mode (no console window) ---")
+        pyinstaller_args.append('--windowed')
+
+
+    # --- Add data files ---
+    # pyinstaller's --add-data format is 'source;dest_in_bundle' on windows
+    pyinstaller_args.extend([
         '--add-data', f'logo.png{os.pathsep}.',
         '--add-data', f'notification.wav{os.pathsep}.',
+    ])
 
-        # --- Add hidden imports that PyInstaller might miss ---
+    # --- Add hidden imports that PyInstaller might miss ---
+    pyinstaller_args.extend([
         '--hidden-import', 'kivy.app',
         '--hidden-import', 'kivy.uix.boxlayout',
         '--hidden-import', 'kivy.uix.button',
@@ -119,10 +135,10 @@ def main():
         '--hidden-import', 'huggingface_hub',
         '--hidden-import', 'docx',
         '--hidden-import', 'llama_cpp',
-        
-        # --- Entry point script ---
-        ENTRY_POINT
-    ]
+    ])
+    
+    # --- Entry point script ---
+    pyinstaller_args.append(ENTRY_POINT)
 
     # add kivy hooks path to the command if found
     if kivy_hooks_path:
@@ -130,8 +146,8 @@ def main():
 
     # add llama_cpp lib path to the command if found
     if llama_lib_path:
-        # we want to place the lib folder inside a 'llama_cpp' folder in the bundle
-        pyinstaller_args.extend(['--add-data', f'{llama_lib_path}{os.pathsep}llama_cpp/lib'])
+        # for libraries, --add-binary is often more reliable than --add-data
+        pyinstaller_args.extend(['--add-binary', f'{llama_lib_path}{os.pathsep}llama_cpp/lib'])
 
     print("--- Starting PyInstaller Build ---")
     print(f"App Name: {APP_NAME}")
