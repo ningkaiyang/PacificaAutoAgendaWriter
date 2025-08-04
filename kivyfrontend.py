@@ -878,7 +878,6 @@ class PacificaAgendaApp(App):
 
     def build(self):
         Window.clearcolor = StyledButton.hex2rgba(PACIFICA_SAND, 1)
-        Window.size = (1280, 720)  # set default window size
         
         self.backend = AgendaBackend(
             model_path=self.CONF["model_path"],
@@ -911,13 +910,10 @@ class PacificaAgendaApp(App):
     def on_start(self):
         """this is called after build() and the window is created, so we can center it"""
         try:
-            # now system_size should be available
-            desktop_width, desktop_height = Window.system_size
-            window_width, window_height = Window.size
-            
             # calculate the position and set it
             Window.left = 100
-            Window.top = 100
+            Window.top = 50
+            Window.maximize()
         except Exception as e:
             print(f"could not center window: {e}")
 
@@ -1958,8 +1954,9 @@ class PacificaAgendaApp(App):
             "The Settings screen provides powerful customization options:\n"
             "• [b]CSV Column Headers[/b]: If your CSV file uses different header names (e.g., 'Meeting_Date' instead of 'MEETING DATE'), you can change what the app looks for here. Click each button ('Date', 'Section', etc.) to edit the corresponding header name.\n"
             "• [b]Prompt Templates[/b]: Advanced users can edit the instructions (prompts) given to the AI. This allows for fine-tuning the summarization and formatting style.\n"
-            "• [b]Debug Mode[/b]: Toggling this on will show a detailed debug console on the generation screen, which is useful for troubleshooting.\n"
+            "• [b]Debug Mode[/b]: Toggling this on will show a detailed debug console on the generation screen, which is useful for troubleshooting. It displays the exact text sent to the AI and performance metrics like generation speed.\n"
             "• [b]Ignore Bracketed Text[/b]: When enabled, the app will automatically remove any text found inside square brackets `[]` from your CSV data before sending it to the AI.\n"
+            "• [b]GUI Scale Factor[/b]: If UI elements appear too large or too small on your screen, you can adjust the scale. Enter a number (e.g., `1.0` for default, `1.2` for larger, `0.9` for smaller) and click 'Set Scale'. The UI will immediately rescale. A restart is not required.\n"
             "• [b]Uninstall App[/b]: This provides a quick way to completely remove all application data, including the downloaded model, settings, and logs. [b]Settings deletion is irreversible.[/b]"
         )
         if hasattr(self, 'help_label'):
