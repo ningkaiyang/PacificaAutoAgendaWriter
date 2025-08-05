@@ -1195,11 +1195,17 @@ class PacificaAgendaApp(App):
         self.back_gen_btn.bind(on_release=lambda *_: self._cancel_generation())
         top.add_widget(self.back_gen_btn)
 
-        save_btn = StyledButton(text="Save", size_hint=(None, None), width=220, height=75)
+        save_btn = StyledButton(text="Save DOCX", size_hint=(None, None), width=220, height=75)
         save_btn.disabled = True
         self.save_button = save_btn
         save_btn.bind(on_release=lambda *_: self._save_report())
         top.add_widget(save_btn)
+
+        copy_btn = StyledButton(text="Copy Text", size_hint=(None, None), width=220, height=75)
+        copy_btn.disabled = True
+        self.copy_button = copy_btn # Store reference
+        copy_btn.bind(on_release=lambda *_: self._copy_report_to_clipboard())
+        top.add_widget(copy_btn)
 
         layout.add_widget(top)
 
@@ -1838,11 +1844,20 @@ class PacificaAgendaApp(App):
             self._update_model_status()
 
             # Show a final message before quitting
-            final_msg_content = Label(
-                text="Application data has been removed.\n"
-                     "Please drag the application to the Trash to complete uninstallation.",
-                halign='center'
-            )
+            if platform == 'win':
+                msg = ("Application data has been removed.\n"
+                       "Please delete the application executable (.exe) "
+                       "to complete uninstallation.")
+            elif platform == 'macosx':
+                msg = ("Application data has been removed.\n"
+                       "Please drag the application to the Trash "
+                       "to complete uninstallation.")
+            else: # Linux, etc.
+                msg = ("Application data has been removed.\n"
+                       "Please delete the application file "
+                       "to complete uninstallation.")
+
+            final_msg_content = Label(text=msg, halign='center')
             popup = Popup(title="Uninstall Complete", content=final_msg_content, size_hint=(0.6, 0.4))
 
             # Use a clock schedule to close the app after the popup is shown
@@ -1945,10 +1960,10 @@ class PacificaAgendaApp(App):
             "• You will be taken to a new screen where you can see the AI generating the report in real-time.\n"
             "• The output window and debug console (if enabled) will scroll automatically.\n\n"
 
-            "[size=30][b]Step 6: Save Your Report[/b][/size]\n"
-            "• When the process is finished, the '[b]Save[/b]' button will become active.\n"
+            "[size=30][b]Step 6: Save or Copy Your Report[/b][/size]\n"
+            "• When the process is finished, the '[b]Save[/b]' and '[b]Copy[/b]' buttons will become active.\n"
             "• A notification sound will play, and the app window will come to the front.\n"
-            "• Click '[b]Save[/b]', choose a location, and the report will be saved as a formatted Microsoft Word (.docx) file.\n\n"
+            "• Click '[b]Save[/b]' to save the report as a formatted Microsoft Word (.docx) file. Alternatively, click '[b]Copy[/b]' to copy the entire report text to your clipboard for pasting elsewhere.\n\n"
 
             "[size=34][b]Part 3: Advanced Settings[/b][/size]\n\n"
             "The Settings screen provides powerful customization options:\n"
@@ -2162,6 +2177,7 @@ class PacificaAgendaApp(App):
         self.generated_report_text = full_text
         self.meeting_dates_for_report = dates
         self.save_button.disabled = False
+        self.copy_button.disabled = False
         self._append_gen_text("\n--- DONE ---\n")
         if Window.focus:
             self._show_info("Generation Complete. You can now save the report.")
@@ -2249,11 +2265,26 @@ class PacificaAgendaApp(App):
                 # even if dependencies are installed (e.g., D-Bus issues on Linux).
                 print(f"Error sending plyer notification: {e}", file=sys.stderr)
 
+    def _copy_report_to_clipboard(self):
+        from kivy.core.clipboard import Clipboard
+        if self.generated_report_text:
+            Clipboard.copy(self.generated_report_text)
+            self._show_info("Report Copied", "The generated report text has been copied to the clipboard.")
+
     # ---------------------------------------------------------------- Save document
     def _save_report(self):
         if not self.generated_report_text.strip():
             return
-        doc = self.backend.create_word_document(self.generated_report_text, self.meeting_dates_for_report)
+
+        # Determine the reporting year on the frontend
+        current_year = datetime.now().year
+
+        # Pass the year to the backend
+        doc = self.backend.create_word_document(
+            self.generated_report_text,
+            self.meeting_dates_for_report,
+            reporting_year=current_year
+        )
         fname = f"Council_Agenda_Summary_{datetime.now():%Y%m%d}.docx"
         self._save_docx(doc, fname)
 

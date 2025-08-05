@@ -604,7 +604,7 @@ class AgendaBackend:
 
     # ------------------------------------------------------------------ Word DOC creation
     @staticmethod
-    def create_word_document(content, meeting_dates):
+    def create_word_document(content, meeting_dates, reporting_year: int):
         """Create the Word document with proper formatting from raw text."""
         doc = Document()
         
@@ -626,8 +626,8 @@ class AgendaBackend:
         # Calculate month range
         if meeting_dates:
             try:
-                # Date format is 'DD-Mon', e.g., '25-Aug'. Assume current year.
-                dates = [datetime.strptime(f"{d}-{datetime.now().year}", "%d-%b-%Y") for d in meeting_dates]
+                # Use the explicitly passed reporting_year
+                dates = [datetime.strptime(f"{d}-{reporting_year}", "%d-%b-%Y") for d in meeting_dates]
                 
                 # The list is chronologically sorted, so min is first, max is last.
                 min_date = dates[0]

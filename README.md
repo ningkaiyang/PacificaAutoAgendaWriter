@@ -11,6 +11,7 @@ This application is designed to significantly streamline the process of creating
 *   **Customizable AI Prompts:** Advanced users can modify the prompt templates used for both summarization (Pass 1) and formatting (Pass 2) via the settings menu, allowing for fine-tuned control over the AI's output.
 *   **Self-Scrolling Console:** Both the main generation output and the optional debug console now scroll automatically, allowing you to watch the process unfold in real-time without manual intervention.
 *   **System Notifications:** When a report is finished, the application window is brought to the foreground, a sound effect is played, and a native OS notification is displayed, so you never miss a completed task.
+*   **Copy to Clipboard:** Instantly copy the entire generated report text with a single click, ready to be pasted into emails or other documents.
 *   **Quick Uninstall:** A clean uninstall option in the settings menu allows for the complete removal of all application data, including the downloaded model and configuration files.
 *   **Cross-Platform:** Built with Python and Kivy to run on Windows, macOS, and Linux.
 
@@ -36,7 +37,7 @@ This application is designed to significantly streamline the process of creating
 4.  **Upload File:** Drag and drop your `.csv` file onto the main window or use the upload area to browse for it.
 5.  **Review Items:** A new screen will appear showing all agenda items. Items flagged for inclusion will be pre-selected. Review and toggle selections as needed.
 6.  **Generate:** Click the "Generate" button to start the AI summarization process.
-7.  **Save:** Once complete, save the report as a `.docx` file.
+7.  **Save or Copy:** Once complete, you can save the report as a `.docx` file or copy the full text to your clipboard.
 
 ## Current Status
 This application is at **Version 3.0 (Kivy Overhaul)**. It represents a major architectural and feature update, focusing on user experience, configurability, and a more robust workflow.
@@ -48,3 +49,17 @@ This application is at **Version 3.0 (Kivy Overhaul)**. It represents a major ar
 *   **Model Management:** `huggingface-hub`
 *   **Word Document Generation:** `python-docx`
 *   **System Notifications:** `plyer`
+
+## Building the Application
+
+To create a standalone executable for your operating system, you can use the provided build script. This is useful for distributing the application to users who do not have Python installed.
+
+1.  Ensure all development dependencies, including `PyInstaller` and `Pillow`, are installed. If you have a `requirements-dev.txt` or similar, install from it. Otherwise, install them manually:
+    ```bash
+    pip install pyinstaller pillow
+    ```
+2.  Run the build script from your terminal in the project's root directory:
+    ```bash
+    python build.py
+    ```
+3.  The build process will take a few minutes. Once complete, the final application will be located in the `dist` folder (e.g., `dist/AutoAgendaWriter.exe` on Windows).
