@@ -110,14 +110,8 @@ def main():
         '--add-data', f'notification.wav{os.pathsep}.',
     ])
 
-    # --- Add version file for Windows build properties ---
-    if sys.platform == 'win32':
-        pyinstaller_args.extend(['--version-file', 'version.txt'])
-
     # --- Add hidden imports that PyInstaller might miss ---
     pyinstaller_args.extend([
-        '--hidden-import', 'tkinter',
-        '--hidden-import', 'tkinter.filedialog',
         '--hidden-import', 'kivy.app',
         '--hidden-import', 'kivy.uix.boxlayout',
         '--hidden-import', 'kivy.uix.button',
