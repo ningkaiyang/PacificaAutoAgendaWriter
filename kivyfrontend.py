@@ -125,34 +125,31 @@ def native_open_file_dialog(title="Select File", file_types=None, multiple=False
 
     elif platform == "macosx":
         try:
-            # build applescript command that returns POSIX path directly
-            script = f'''
-            set theFile to choose file with prompt "{title}"
+            # Build the base AppleScript command
+            script = f'choose file with prompt "{title}"'
+
+            # Dynamically build the 'of type' clause from file_types
+            if file_types:
+                allowed_extensions = []
+                for _, pattern in file_types:
+                    # Filter out wildcards like '*.*' and get the extension
+                    if pattern.startswith("*.") and pattern != "*.*":
+                        allowed_extensions.append(pattern[2:])
+                
+                if allowed_extensions:
+                    # Format for AppleScript: {"ext1", "ext2"}
+                    type_list = ", ".join(f'"{ext}"' for ext in allowed_extensions)
+                    script += f' of type {{{type_list}}}'
+            
+            # Finalize the script for osascript
+            full_script = f'''
+            set theFile to {script}
             return POSIX path of theFile
             '''
             
-            # add file type filtering if needed
-            if file_types:
-                # convert file types to applescript format
-                if any("*.csv" in ft[1] for ft in file_types):
-                    script = f'''
-                    set theFile to choose file with prompt "{title}" of type {{"csv"}}
-                    return POSIX path of theFile
-                    '''
-                elif any("*.gguf" in ft[1] for ft in file_types):
-                    script = f'''
-                    set theFile to choose file with prompt "{title}" of type {{"gguf"}}
-                    return POSIX path of theFile
-                    '''
-                elif any("*.bin" in ft[1] for ft in file_types):
-                    script = f'''
-                    set theFile to choose file with prompt "{title}" of type {{"bin"}}
-                    return POSIX path of theFile
-                    '''
-            
             # run osascript
             result = subprocess.run(
-                ["osascript", "-e", script],
+                ["osascript", "-e", full_script],
                 capture_output=True,
                 text=True,
                 timeout=60
@@ -516,6 +513,30 @@ class UploadZone(BoxLayout):
             self.overlay_color.rgba = base_color
 
 
+class ModelUploadZone(UploadZone):
+    """UploadZone specialised for .gguf model files."""
+    def __init__(self, app_instance, **kw):
+        super().__init__(app_instance, **kw)
+        # Overwrite labels for model install context
+        app = App.get_running_app()
+        scale = app.gui_scale_factor if app else 1.0
+        self.upload_label.text = (
+            f"[size={int(48*scale)}][b]Click to Install Model[/b][/size]\n"
+            f"[size={int(28*scale)}]or drag and drop your .gguf file here[/size]"
+        )
+        self.hint_label.text = f"[size={int(22*scale)}]Accepted file: *.gguf[/size]"
+
+    # Override behaviour – clicking opens gguf browser
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos):
+            self._set_hover_state(True)
+            self.app_instance._open_file_browser("gguf")
+            return True
+        return super().on_touch_down(touch)
+
+    # Hover colour tweak remains inherited.
+
+
 # --------------------------------------------------------------------------------------
 # Simple item widget for the list
 # --------------------------------------------------------------------------------------
@@ -796,6 +817,11 @@ class CreditsScreen(Screen):
     pass
 
 
+class ModelInstallScreen(Screen):
+    """Screen for offline model installation via drag-and-drop or file chooser."""
+    pass
+
+
 # --------------------------------------------------------------------------------------
 # Main App
 # --------------------------------------------------------------------------------------
@@ -891,6 +917,7 @@ class PacificaAgendaApp(App):
         self._build_settings()
         self._build_help()
         self._build_credits()
+        self._build_model_install()  # added for offline install screen
 
         # Set initial model status in settings UI
         self._update_model_status()
@@ -933,6 +960,9 @@ class PacificaAgendaApp(App):
             self.screen_manager.transition.direction = "left"
         elif current_screen == "generation" and screen_name == "review":
             # going back from generation to review slides right
+            self.screen_manager.transition.direction = "right"
+        elif current_screen == "model_install" and screen_name == "settings":
+            # going back from model install to settings slides right
             self.screen_manager.transition.direction = "right"
         else:
             # default direction for other transitions
@@ -1004,6 +1034,9 @@ class PacificaAgendaApp(App):
         if filetype == "csv":
             filters = [("CSV files", "*.csv"), ("All files", "*.*")]
             title = "Select CSV File"
+        elif filetype == "gguf":
+            filters = [("GGUF model files", "*.gguf"), ("All files", "*.*")]
+            title = "Select .gguf Model File"
         else:
             filters = [("All files", "*.*")]
             title = "Select File"
@@ -1013,25 +1046,45 @@ class PacificaAgendaApp(App):
         # If native dialog is not supported/failed, it will be None.
         if selection is not None:
             if selection:  # If list is not empty (file was selected)
-                self._process_csv(selection[0])
+                if filetype == "csv":
+                    self._process_csv(selection[0])
+                elif filetype == "gguf":
+                    self._handle_gguf_file(selection[0])
             return  # Return here to prevent Kivy fallback
         
         # fallback to kivy file chooser
-        chooser = FileChooserListView(filters=["*.csv"] if filetype == "csv" else None, path=os.getcwd())
-        popup = Popup(title="Select CSV", content=chooser, size_hint=(0.9, 0.9))
+        if filetype == "csv":
+            kivy_filters = ["*.csv"]
+            popup_title = "Select CSV"
+            callback = self._process_csv
+        elif filetype == "gguf":
+            kivy_filters = ["*.gguf"]
+            popup_title = "Select .gguf Model File"
+            callback = self._handle_gguf_file
+        else:
+            kivy_filters = None
+            popup_title = "Select File"
+            callback = lambda _: None # No-op for unknown types
+
+        chooser = FileChooserListView(filters=kivy_filters, path=os.getcwd())
+        popup = Popup(title=popup_title, content=chooser, size_hint=(0.9, 0.9))
 
         def _file_chosen(instance, selection, touch):
             if selection:
                 popup.dismiss()
-                self._process_csv(selection[0])
+                callback(selection[0])
 
         chooser.bind(on_submit=_file_chosen)
         popup.open()
 
     def _on_file_drop(self, _window, file_path_bytes):
         path = file_path_bytes.decode("utf-8")
-        if path.lower().endswith(".csv"):
+        current_screen = self.screen_manager.current
+
+        if path.lower().endswith(".csv") and current_screen == "home":
             self._process_csv(path)
+        elif path.lower().endswith(".gguf") and current_screen == "model_install":
+            self._handle_gguf_file(path)
 
     def _process_csv(self, filepath: str):
         try:
@@ -1335,7 +1388,7 @@ class PacificaAgendaApp(App):
             width=180,
             height=75
         )
-        self.install_model_btn.bind(on_release=lambda *_: self._install_model())
+        self.install_model_btn.bind(on_release=lambda *_: self._open_model_install_menu())
         control_model = BoxLayout(orientation="horizontal", spacing=10 * scale, size_hint_x=0.7)
         control_model.add_widget(self.model_status_lbl)
         control_model.add_widget(self.install_model_btn)
@@ -1646,6 +1699,7 @@ class PacificaAgendaApp(App):
         self.backend.model_path = model_path
         # The model is already loaded in backend.llm_model, so we just update UI.
         self._update_model_status()
+        self._navigate_to("settings")
 
     @mainthread
     def _on_model_download_error(self, exc: Exception):
@@ -1929,11 +1983,15 @@ class PacificaAgendaApp(App):
             
             "[size=34][b]Part 1: First-Time Setup[/b][/size]\n\n"
             "[size=30][b]Step 1: Install the AI Model[/b][/size]\n"
-            "The first time you run the app, you need to install the local AI model. This is a one-time download (~4GB).\n"
-            "1. On the home screen, click '[b]Settings[/b]'.\n"
-            "2. In the Settings menu, find the 'Model' section and click the '[b]Install[/b]' button.\n"
-            "3. Confirm the download. The app will download the model to a local folder. This may take a few minutes.\n"
-            "4. Once complete, the status will show 'Ready', and you can return to the home screen.\n\n"
+            "You have two options:\n"
+            "1. [b]Offline Install (Recommended for No-Internet Environments)[/b]\n"
+            "   • Click 'Install' in Settings – the screen will shift to the [b]Install Model[/b] page.\n"
+            "   • Drag and drop the provided *.gguf* file, or click to browse.\n"
+            "   • The file is copied locally and the model is ready — [b]no internet required[/b].\n"
+            "2. [b]Download from HuggingFace (Requires Internet)[/b]\n"
+            "   • On the Install Model page, click 'Download Model from HuggingFace Online'.\n"
+            "   • The ~4 GB model will download automatically.\n"
+            "\n"
 
             "[size=34][b]Part 2: Generating a Report[/b][/size]\n\n"
             "[size=30][b]Step 2: Prepare Your CSV File[/b][/size]\n"
@@ -2095,7 +2153,76 @@ class PacificaAgendaApp(App):
         # let things settle then add to screen
         self.screen_manager.add_widget(scr)
 
+    def _build_model_install(self):
+        """Create the model installation screen (offline + download)."""
+        scale = self.gui_scale_factor
+        scr = ModelInstallScreen(name="model_install")
+        root = BoxLayout(orientation="vertical", padding=40*scale, spacing=20*scale)
+        scr.add_widget(root)
+
+        # Header bar
+        top_bar = BoxLayout(orientation="horizontal", size_hint_y=None, height=75*scale, spacing=10*scale)
+        back_btn = StyledButton(text="Back", size_hint=(None,None), width=180, height=75)
+        back_btn.bind(on_release=lambda *_: self._navigate_to("settings"))
+        top_bar.add_widget(back_btn)
+
+        title = Label(text="[b]Install Model[/b]", markup=True,
+                      font_size=50*scale, color=[0,0,0,1],
+                      halign="center", valign="middle")
+        title.bind(size=lambda inst, *_: inst.setter('text_size')(inst, (inst.width, None)))
+        top_bar.add_widget(title)
+
+        # Add a spacer of the same width as the back button to center the title
+        top_bar.add_widget(Widget(size_hint=(None, None), width=180 * scale))
+        root.add_widget(top_bar)
+
+        # Upload zone for .gguf
+        self.model_upload_zone = ModelUploadZone(self)
+        root.add_widget(self.model_upload_zone)
+
+        # Spacer removed to bring button closer to upload zone. The root layout's
+        # spacing property will handle the gap.
+
+        # Download-from-internet button (centered in its own layout)
+        dl_btn_container = BoxLayout(orientation='horizontal', size_hint_y=None, height=90*scale)
+        dl_btn = StyledButton(text="Download Model from HuggingFace Online (Uses Internet!)",
+                              size_hint=(None,None), width=900, height=90)
+        dl_btn.bind(on_release=lambda *_: self._install_model())
+        
+        dl_btn_container.add_widget(Widget()) # Spacer left
+        dl_btn_container.add_widget(dl_btn)
+        dl_btn_container.add_widget(Widget()) # Spacer right
+        root.add_widget(dl_btn_container)
+
+        self.screen_manager.add_widget(scr)
+
+    def _handle_gguf_file(self, file_path: str):
+        """Copy the selected .gguf into the user models dir, rename, load."""
+        try:
+            if not os.path.isfile(file_path):
+                self._show_error("File Error", "Selected file does not exist.")
+                return
+            models_dir = os.path.join(self.user_data_dir, "models")
+            os.makedirs(models_dir, exist_ok=True)
+            dest_path = os.path.join(models_dir, MODEL_FILENAME)
+            shutil.copy(file_path, dest_path)
+
+            # Update config and backend
+            self.CONF["model_path"] = dest_path
+            self._save_conf()
+            self.backend.model_path = dest_path
+            self.backend._load_llm_model_async()
+
+            # Inform UI
+            self._on_model_download_complete(dest_path)
+        except Exception as exc:
+            self._show_error("Install Error", f"Could not install model: {exc}")
+
     # ---------------------------------------------------------------- Generation logic
+    def _open_model_install_menu(self):
+        self.screen_manager.transition.direction = "left"
+        self.screen_manager.current = "model_install"
+
     def _start_generation(self):
         if not self.selected_indices:
             self._show_error("Nothing Selected", "Please select at least one row.")

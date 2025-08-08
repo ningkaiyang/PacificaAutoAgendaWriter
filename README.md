@@ -27,6 +27,17 @@ This application is designed to significantly streamline the process of creating
     ```
     This will install Kivy, pandas, llama-cpp-python, and all other necessary libraries.
 
+After cloning/installing dependencies, you can prepare the model in one of two ways:
+
+**A. Offline Install (no internet required)**
+1. Obtain the model file `Qwen3-4B-Q6_K.gguf` (≈ 4 GB) from a trusted source.
+2. Launch the application and open **Settings → Install**.
+3. On the **Install Model** page, drag-and-drop the `.gguf` file (or click to browse).
+   The file will be copied to your user data directory and renamed automatically.
+
+**B. Online Download (internet required)**
+Click "Download Model from HuggingFace Online" on the Install Model page and follow the prompts.
+
 ## How to Use
 1.  **Launch App:** Execute the application by running the Python script:
     ```bash
