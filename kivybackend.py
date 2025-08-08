@@ -33,6 +33,10 @@ MODEL_FILENAME = "Qwen3-4B-Q6_K.gguf"
 # resource module is Unix-specific, so we remove it for Windows compatibility.
 resource = None
 
+class ModelNotFoundError(FileNotFoundError):
+    """Raised when a requested GGUF model file cannot be found in the expected folder."""
+    pass
+
 # --------------------------------------------------------------------------------------
 # Helpers
 # --------------------------------------------------------------------------------------
@@ -252,6 +256,37 @@ class AgendaBackend:
         # if self.model_path and os.path.exists(self.model_path):
         #     self._load_llm_model_async()  # Non-blocking
 
+    # ----------------------------  Multi-Model helpers  ----------------------------
+    def _get_models_dir(self) -> str:
+        """Return the absolute path to the models directory inside user_data_dir."""
+        if not self.user_data_dir:
+            raise ValueError("user_data_dir not set – cannot resolve models directory")
+        models_dir = os.path.join(self.user_data_dir, "models")
+        os.makedirs(models_dir, exist_ok=True)
+        return models_dir
+
+    def get_available_models(self) -> List[str]:
+        """List *.gguf files (filenames only) available in the models directory."""
+        try:
+            models_dir = self._get_models_dir()
+            return sorted([f for f in os.listdir(models_dir) if f.lower().endswith(".gguf")])
+        except Exception:
+            return []
+
+    def load_model_by_filename(self, filename: str):
+        """
+        Load the GGUF model identified by its filename (blocking call wrapper).
+        The actual heavy loading runs in a background thread via _load_llm_model_async().
+        """
+        if not filename:
+            raise ValueError("Filename must be provided")
+        full_path = os.path.join(self._get_models_dir(), filename)
+        if not os.path.exists(full_path):
+            raise ModelNotFoundError(f"Model file not found: {full_path}")
+        # Update state then async-load
+        self.model_path = full_path
+        self._load_llm_model_async(full_path)
+
     # ------------------------------------------------------------------ CSV helpers
     @staticmethod
     def _validate_headers(df: pd.DataFrame, required_headers: List[str]):
@@ -287,21 +322,28 @@ class AgendaBackend:
         return df, all_items
 
     # ------------------------------------------------------------------ LLM loading
-    def _load_llm_model_async(self):
+    def _load_llm_model_async(self, model_path: str | None = None):
+        """
+        Load the llama.cpp model asynchronously.
+        If model_path is None, falls back to self.model_path.
+        """
+        path_to_load = model_path or self.model_path
+
         def _loader():
             try:
-                if not self.model_path or not os.path.exists(self.model_path):
-                    print(f"[backend] Model file not found: {self.model_path}")
+                if not path_to_load or not os.path.exists(path_to_load):
+                    print(f"[backend] Model file not found: {path_to_load}")
                     return
                 with suppress_stderr():
                     self.llm_model = Llama(
-                        model_path=self.model_path,
+                        model_path=path_to_load,
                         chat_format="chatml",
                         n_ctx=10000,
                         n_threads=default_threads(),
                         verbose=False,
-                        n_gpu_layers=-1
+                        n_gpu_layers=-1,
                     )
+                print(f"[backend] Model loaded: {path_to_load}")
             except Exception as exc:
                 traceback.print_exc()
                 print(f"[backend] Failed to load model: {exc}")

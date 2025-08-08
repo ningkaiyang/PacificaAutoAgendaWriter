@@ -71,6 +71,7 @@ from kivy.uix.recycleview.views import RecycleDataViewBehavior
 from kivy.uix.screenmanager import Screen, ScreenManager, SlideTransition
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.relativelayout import RelativeLayout
+from kivy.uix.spinner import Spinner
 from kivy.uix.textinput import TextInput
 from kivy.config import Config
 Config.set('input', 'mouse', 'mouse,multitouch_on_demand')
@@ -482,11 +483,12 @@ class UploadZone(BoxLayout):
         """handle clicks anywhere in the upload zone"""
         if self.collide_point(*touch.pos):
             if self.is_uninstalled_state:
-                self.app_instance._navigate_to("settings")
+                # Route directly to Model Settings when no model is installed
+                self.app_instance._navigate_to("model_install")
                 return True
             # add visual feedback by temporarily darkening the zone
             self._set_hover_state(True)
-            # trigger file browser
+            # trigger file browser for CSV
             self.app_instance._open_file_browser("csv")
             return True
         return super().on_touch_down(touch)
@@ -526,13 +528,6 @@ class ModelUploadZone(UploadZone):
         )
         self.hint_label.text = f"[size={int(22*scale)}]Accepted file: *.gguf[/size]"
 
-    # Override behaviour – clicking opens gguf browser
-    def on_touch_down(self, touch):
-        if self.collide_point(*touch.pos):
-            self._set_hover_state(True)
-            self.app_instance._open_file_browser("gguf")
-            return True
-        return super().on_touch_down(touch)
 
     # Hover colour tweak remains inherited.
 
@@ -870,7 +865,8 @@ class PacificaAgendaApp(App):
 
     def _load_conf(self) -> dict:
         default_conf = {
-            "model_path": "",
+            "current_model": "",    # <-- NEW
+            "model_path": "",       # legacy key kept for migration
             "prompt_pass1": None,
             "prompt_pass2": None,
             "csv_headers": None,
@@ -888,6 +884,10 @@ class PacificaAgendaApp(App):
                     data["ignore_brackets"] = False
                 if "gui_scale" not in data:
                     data["gui_scale"] = 1.0
+                # Migration: if legacy model_path exists but current_model missing, derive filename
+                if "current_model" not in data:
+                    legacy_path = data.get("model_path", "")
+                    data["current_model"] = os.path.basename(legacy_path) if legacy_path else ""
                 default_conf.update(data)
         except Exception:
             # On first run or error, populate with defaults
@@ -896,6 +896,7 @@ class PacificaAgendaApp(App):
 
     def _save_conf(self):
         self.CONF["gui_scale"] = self.gui_scale_factor
+        # 'current_model' already updated elsewhere; just ensure it's present before save
         try:
             with open(self.config_file, "w", encoding="utf-8") as fp:
                 json.dump(self.CONF, fp, indent=2)
@@ -906,7 +907,6 @@ class PacificaAgendaApp(App):
         Window.clearcolor = StyledButton.hex2rgba(PACIFICA_SAND, 1)
         
         self.backend = AgendaBackend(
-            model_path=self.CONF["model_path"],
             user_data_dir=self.user_data_dir,
         )
 
@@ -927,6 +927,9 @@ class PacificaAgendaApp(App):
 
         # Update home screen UI based on installation status
         self._update_home_screen_ui()
+
+        # Load selected model if configured
+        self._initialize_model_loading()
 
         # bind drag-and-drop
         if platform in ("win", "linux", "macosx"):
@@ -1388,7 +1391,7 @@ class PacificaAgendaApp(App):
         )
         self.model_status_lbl.bind(size=lambda inst, *_: inst.setter('text_size')(inst, (inst.width, None)))
         self.install_model_btn = StyledButton(
-            text="Install",
+            text="Model Settings",
             size_hint=(None, None),
             width=180,
             height=75
@@ -1633,21 +1636,99 @@ class PacificaAgendaApp(App):
         self.screen_manager.current = current_screen
         self._show_info("GUI Scale Updated", "UI has been rescaled.")
 
-    # pickers
+    # ---------------------------  Model Management ---------------------------
+    def _initialize_model_loading(self):
+        """Attempt to load the model noted in config (current_model)."""
+        model_filename = self.CONF.get("current_model", "")
+        if model_filename:
+            try:
+                self.backend.load_model_by_filename(model_filename)
+            except Exception as e:
+                print(f"[frontend] Could not load model '{model_filename}': {e}")
+                self.CONF["current_model"] = ""
+                self._save_conf()
+        # Update labels etc.
+        self._update_model_status()
+        # Populate spinner after backend lists are ready
+        from kivy.clock import Clock
+        Clock.schedule_once(lambda dt: self._refresh_models_dropdown(), 0.1)
+
+    def _refresh_models_dropdown(self):
+        """Refresh spinner values with the latest available models."""
+        if not hasattr(self, "model_spinner"):
+            return
+        self.model_spinner.values = self.backend.get_available_models()
+
+        # Ensure current value is still valid
+        current = self.CONF.get("current_model", "")
+        if current and current in self.model_spinner.values:
+            self.model_spinner.text = current
+        else:
+            self.model_spinner.text = "Select Model"
+
+    def _on_model_selected(self, spinner, text):
+        """User picked a model from the dropdown."""
+        if text == "Select Model":
+            return
+        try:
+            self.backend.load_model_by_filename(text)
+            self.CONF["current_model"] = text
+            self._save_conf()
+            self._show_info(f"Model '{text}' selected and loading in background.")
+            self._update_model_status()
+        except Exception as e:
+            self._show_error("Model Load Error", str(e))
+
+    def _confirm_delete_model(self):
+        """Ask user confirmation before deleting the selected model."""
+        fname = self.CONF.get("current_model", "")
+        if not fname:
+            self._show_error("No Model Selected", "Please select a model to delete first.")
+            return
+
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        label = Label(text=f"Delete model '{fname}'?\nThis cannot be undone.", halign='center')
+        btns = BoxLayout(size_hint_y=None, height=75, spacing=10)
+        cancel = StyledButton(text="Cancel")
+        ok = StyledButton(text="Delete", bg_color_name_override="#D9534F")
+        btns.add_widget(cancel); btns.add_widget(ok)
+        content.add_widget(label); content.add_widget(btns)
+        popup = Popup(title="Confirm Delete", content=content, size_hint=(0.7,0.4), auto_dismiss=False)
+        cancel.bind(on_release=lambda *_: popup.dismiss())
+        ok.bind(on_release=lambda *_: (popup.dismiss(), self._delete_model_file(fname)))
+        popup.open()
+
+    def _delete_model_file(self, fname: str):
+        """Physically delete model file and refresh UI."""
+        try:
+            path = os.path.join(self.backend._get_models_dir(), fname)
+            if os.path.exists(path):
+                os.remove(path)
+            # If deleted model was current, clear selection
+            if self.CONF.get("current_model") == fname:
+                self.CONF["current_model"] = ""
+                self.backend.llm_model = None
+            self._save_conf()
+            self._refresh_models_dropdown()
+            self._update_model_status()
+            self._show_info(f"Model '{fname}' deleted.")
+        except Exception as e:
+            self._show_error("Delete Error", str(e))
+
     @mainthread
     def _update_model_status(self):
-        model_path = self.CONF.get("model_path")
-        if model_path and os.path.exists(model_path):
-            self.model_status_lbl.text = f"Installed at {model_path}"
-            self.install_model_btn.text = "Ready" # Change text to "Ready"
-            self.install_model_btn.disabled = True
-            # Also update backend instance if needed
-            if not self.backend.llm_model and self.backend.model_path:
-                self.backend._load_llm_model_async()
+        current = self.CONF.get("current_model", "")
+        available = self.backend.get_available_models()
+        if current and current in available:
+            self.model_status_lbl.text = f"Current Model: {current}"
         else:
-            self.model_status_lbl.text = f"Not Installed ({MODEL_FILENAME})"
-            self.install_model_btn.text = "Install" # Ensure text is "Install" if not installed
-            self.install_model_btn.disabled = False
+            if available:
+                self.model_status_lbl.text = "No model selected"
+            else:
+                self.model_status_lbl.text = "No models found – please install one"
+        # Button stays enabled & labelled as 'Model Settings'
+        self.install_model_btn.text = "Model Settings"
+        self.install_model_btn.disabled = False
         self._update_home_screen_ui()
 
     def _install_model(self):
@@ -1676,8 +1757,7 @@ class PacificaAgendaApp(App):
         def on_confirm(*_):
             popup.dismiss()
             self.model_status_lbl.text = "Downloading... (may take a while)"
-            self.install_model_btn.disabled = True
-
+            # Button stays enabled for settings
             # Start download in a thread
             threading.Thread(
                 target=self.backend.download_model,
@@ -1695,15 +1775,18 @@ class PacificaAgendaApp(App):
 
     @mainthread
     def _on_model_download_complete(self, model_path: str):
-        self._show_info("Model downloaded successfully!")
-        self.CONF["model_path"] = model_path
+        """
+        Called by backend.download_model() once the model has downloaded **and** loaded.
+        model_path is the absolute path; convert to filename & update state.
+        """
+        fname = os.path.basename(model_path)
+        self.CONF["current_model"] = fname
         self._save_conf()
 
-        # The backend's download_model method already loads the model instance.
-        # We just need to update the path attribute in the backend for future runs.
-        self.backend.model_path = model_path
-        # The model is already loaded in backend.llm_model, so we just update UI.
+        # Refresh dropdown / labels
+        self._refresh_models_dropdown()
         self._update_model_status()
+        self._show_info("Model downloaded and loading in background.")
         self._navigate_to("settings")
 
     @mainthread
@@ -1897,8 +1980,9 @@ class PacificaAgendaApp(App):
             if os.path.exists(data_dir):
                 shutil.rmtree(data_dir)
 
-            # Reset model path in config
-            self.CONF["model_path"] = ""
+            # Reset model keys in config
+            self.CONF.pop("current_model", None)
+            self.CONF.pop("model_path", None)  # legacy
             self._save_conf()
             self._update_model_status()
 
@@ -1931,8 +2015,8 @@ class PacificaAgendaApp(App):
             self._show_error("Uninstall Error", f"Could not remove application data: {e}")
 
     def _update_home_screen_ui(self):
-        model_path = self.CONF.get("model_path")
-        is_installed = model_path and os.path.exists(model_path)
+        current = self.CONF.get("current_model", "")
+        is_installed = current and (current in self.backend.get_available_models())
         self.upload_zone.set_uninstalled_state(not is_installed)
 
     # ---------------------------------------------------------------- Help & Credits
@@ -2199,32 +2283,54 @@ class PacificaAgendaApp(App):
         dl_btn_container.add_widget(Widget()) # Spacer right
         root.add_widget(dl_btn_container)
 
+        # Available models dropdown + refresh + delete
+        list_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=75*scale, spacing=10*scale)
+        list_bar.add_widget(Label(text="Available Models:", color=[0,0,0,1], size_hint_x=None, width=200*scale, font_size=28*scale))
+        self.model_spinner = Spinner(text="Select Model",
+                                     values=self.backend.get_available_models(),
+                                     size_hint=(None,None), width=300*scale, height=75*scale)
+        self.model_spinner.bind(text=self._on_model_selected)
+        refresh_btn = StyledButton(text="Refresh", size_hint=(None,None), width=150, height=75)
+        refresh_btn.bind(on_release=lambda *_: self._refresh_models_dropdown())
+        del_btn = StyledButton(text="Delete Model", bg_color_name_override="#D9534F",
+                               size_hint=(None,None), width=200, height=75)
+        del_btn.bind(on_release=lambda *_: self._confirm_delete_model())
+        list_bar.add_widget(self.model_spinner)
+        list_bar.add_widget(refresh_btn)
+        list_bar.add_widget(del_btn)
+        root.add_widget(list_bar)
+
+        # Initial refresh to set proper selection
+        from kivy.clock import Clock
+        Clock.schedule_once(lambda dt: self._refresh_models_dropdown(), 0)
+
         self.screen_manager.add_widget(scr)
 
     def _handle_gguf_file(self, file_path: str):
-        """Copy the selected .gguf into the user models dir, rename, load."""
-        # Add post-selection validation for the file type
+        """Copy the selected .gguf into the user models dir, preserve filename, then load."""
         if not file_path or not file_path.lower().endswith(".gguf"):
             self._show_error("Invalid File Type", "The selected file was not a .gguf model file.\nPlease try again.")
             return
-
         try:
             if not os.path.isfile(file_path):
                 self._show_error("File Error", "Selected file does not exist.")
                 return
             models_dir = os.path.join(self.user_data_dir, "models")
             os.makedirs(models_dir, exist_ok=True)
-            dest_path = os.path.join(models_dir, MODEL_FILENAME)
+            base_name = os.path.basename(file_path)
+            dest_path = os.path.join(models_dir, base_name)
             shutil.copy(file_path, dest_path)
 
-            # Update config and backend
-            self.CONF["model_path"] = dest_path
+            # Update config & backend
+            self.CONF["current_model"] = base_name
             self._save_conf()
-            self.backend.model_path = dest_path
-            self.backend._load_llm_model_async()
 
-            # Inform UI
-            self._on_model_download_complete(dest_path)
+            self.backend.load_model_by_filename(base_name)
+
+            # UI updates
+            self._refresh_models_dropdown()
+            self._update_model_status()
+            self._show_info(f"Model '{base_name}' installed and loading in background.")
         except Exception as exc:
             self._show_error("Install Error", f"Could not install model: {exc}")
 
