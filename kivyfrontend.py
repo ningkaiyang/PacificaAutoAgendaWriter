@@ -1035,8 +1035,13 @@ class PacificaAgendaApp(App):
             filters = [("CSV files", "*.csv"), ("All files", "*.*")]
             title = "Select CSV File"
         elif filetype == "gguf":
-            filters = [("GGUF model files", "*.gguf"), ("All files", "*.*")]
-            title = "Select .gguf Model File"
+            if platform == "macosx":
+                # On macOS, don't filter to avoid lag/greyed-out files. We'll validate post-selection.
+                filters = None
+            else:
+                # On other platforms, filtering is fine.
+                filters = [("GGUF model files", "*.gguf"), ("All files", "*.*")]
+            title = "Select a .gguf model file"
         else:
             filters = [("All files", "*.*")]
             title = "Select File"
@@ -2198,6 +2203,11 @@ class PacificaAgendaApp(App):
 
     def _handle_gguf_file(self, file_path: str):
         """Copy the selected .gguf into the user models dir, rename, load."""
+        # Add post-selection validation for the file type
+        if not file_path or not file_path.lower().endswith(".gguf"):
+            self._show_error("Invalid File Type", "The selected file was not a .gguf model file.\nPlease try again.")
+            return
+
         try:
             if not os.path.isfile(file_path):
                 self._show_error("File Error", "Selected file does not exist.")
