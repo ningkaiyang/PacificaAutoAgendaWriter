@@ -1393,7 +1393,7 @@ class PacificaAgendaApp(App):
         self.install_model_btn = StyledButton(
             text="Model Settings",
             size_hint=(None, None),
-            width=180,
+            width=280,   # was 180
             height=75
         )
         self.install_model_btn.bind(on_release=lambda *_: self._open_model_install_menu())
@@ -2209,7 +2209,7 @@ class PacificaAgendaApp(App):
         content.add_widget(Widget(size_hint_y=None, height=15 * scale))
         
         # version
-        add_centered("Version 3.0 - Kivy Overhaul", 38, bold=True)
+        add_centered("Version 4.0 - Multi-Model Support", 38, bold=True)
         content.add_widget(Widget(size_hint_y=None, height=15 * scale))
 
         # description
@@ -2255,7 +2255,7 @@ class PacificaAgendaApp(App):
         back_btn.bind(on_release=lambda *_: self._navigate_to("settings"))
         top_bar.add_widget(back_btn)
 
-        title = Label(text="[b]Install Model[/b]", markup=True,
+        title = Label(text="[b]Install Models[/b]", markup=True,
                       font_size=50*scale, color=[0,0,0,1],
                       halign="center", valign="middle")
         title.bind(size=lambda inst, *_: inst.setter('text_size')(inst, (inst.width, None)))
@@ -2274,8 +2274,8 @@ class PacificaAgendaApp(App):
 
         # Download-from-internet button (centered in its own layout)
         dl_btn_container = BoxLayout(orientation='horizontal', size_hint_y=None, height=90*scale)
-        dl_btn = StyledButton(text="Download Model from HuggingFace Online (Uses Internet!)",
-                              size_hint=(None,None), width=900, height=90)
+        dl_btn = StyledButton(text="Download Qwen3-4B-Q6_K.gguf from Online (Uses Internet)",
+                              size_hint=(None,None), width=900*scale, height=90)
         dl_btn.bind(on_release=lambda *_: self._install_model())
         
         dl_btn_container.add_widget(Widget()) # Spacer left
@@ -2284,11 +2284,11 @@ class PacificaAgendaApp(App):
         root.add_widget(dl_btn_container)
 
         # Available models dropdown + refresh + delete
-        list_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=75*scale, spacing=10*scale)
-        list_bar.add_widget(Label(text="Available Models:", color=[0,0,0,1], size_hint_x=None, width=200*scale, font_size=28*scale))
+        list_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=75*scale, spacing=20*scale)  # spacing +10→20
+        list_bar.add_widget(Label(text="Available Models:", color=[0,0,0,1], size_hint_x=None, width=220*scale, font_size=28*scale))
         self.model_spinner = Spinner(text="Select Model",
                                      values=self.backend.get_available_models(),
-                                     size_hint=(None,None), width=300*scale, height=75*scale)
+                                     size_hint=(None,None), width=600*scale, height=75*scale)  # width 300→600
         self.model_spinner.bind(text=self._on_model_selected)
         refresh_btn = StyledButton(text="Refresh", size_hint=(None,None), width=150, height=75)
         refresh_btn.bind(on_release=lambda *_: self._refresh_models_dropdown())

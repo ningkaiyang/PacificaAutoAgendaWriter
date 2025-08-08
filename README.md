@@ -14,6 +14,7 @@ This application is designed to significantly streamline the process of creating
 *   **Copy to Clipboard:** Instantly copy the entire generated report text with a single click, ready to be pasted into emails or other documents.
 *   **Quick Uninstall:** A clean uninstall option in the settings menu allows for the complete removal of all application data, including the downloaded model and configuration files.
 *   **Cross-Platform:** Built with Python and Kivy to run on Windows, macOS, and Linux.
+*   **Multi-Model Management:** Install, switch, and delete multiple local GGUF models directly from the Model Settings screen. Perfect for experimenting with different model sizes or quantisations.
 
 ## Installation
 1.  **Clone the repository or download the source code.**
@@ -31,7 +32,7 @@ After cloning/installing dependencies, you can prepare the model in one of two w
 
 **A. Offline Install (no internet required)**
 1. Obtain the model file `Qwen3-4B-Q6_K.gguf` (≈ 4 GB) from a trusted source.
-2. Launch the application and open **Settings → Install**.
+2. Launch the application and open **Settings → Model Settings**.
 3. On the **Install Model** page, drag-and-drop the `.gguf` file (or click to browse).
    The file will be copied to your user data directory and renamed automatically.
 
@@ -49,9 +50,10 @@ Click "Download Model from HuggingFace Online" on the Install Model page and fol
 5.  **Review Items:** A new screen will appear showing all agenda items. Items flagged for inclusion will be pre-selected. Review and toggle selections as needed.
 6.  **Generate:** Click the "Generate" button to start the AI summarization process.
 7.  **Save or Copy:** Once complete, you can save the report as a `.docx` file or copy the full text to your clipboard.
+8.  **Switch Models (Optional):** At any time open **Settings → Model Settings** and pick a different model from the drop-down. The new model loads in the background.
 
 ## Current Status
-This application is at **Version 3.0 (Kivy Overhaul)**. It represents a major architectural and feature update, focusing on user experience, configurability, and a more robust workflow.
+This application is at **Version 4.0 (Multi-Model Support)**. It represents a major architectural and feature update, focusing on user experience, configurability, and a more robust workflow.
 
 ## Technical Stack
 *   **GUI:** `Kivy`
