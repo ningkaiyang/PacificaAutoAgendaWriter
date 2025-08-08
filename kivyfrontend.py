@@ -402,7 +402,7 @@ class ToggleSwitch(BoxLayout):
 class UploadZone(BoxLayout):
     """Unified drag-and-drop and click upload zone."""
 
-    def __init__(self, app_instance, **kw):
+    def __init__(self, app_instance, filetype: str = "csv", **kw):
         app = App.get_running_app()
         scale = app.gui_scale_factor if app else 1.0
 
@@ -414,6 +414,7 @@ class UploadZone(BoxLayout):
             **kw,
         )
         self.app_instance = app_instance
+        self.filetype = filetype
         self.is_hovered = False
         self.is_uninstalled_state = False
 
@@ -488,8 +489,8 @@ class UploadZone(BoxLayout):
                 return True
             # add visual feedback by temporarily darkening the zone
             self._set_hover_state(True)
-            # trigger file browser for CSV
-            self.app_instance._open_file_browser("csv")
+            # trigger file browser for the configured filetype
+            self.app_instance._open_file_browser(self.filetype)
             return True
         return super().on_touch_down(touch)
 
@@ -518,7 +519,7 @@ class UploadZone(BoxLayout):
 class ModelUploadZone(UploadZone):
     """UploadZone specialised for .gguf model files."""
     def __init__(self, app_instance, **kw):
-        super().__init__(app_instance, **kw)
+        super().__init__(app_instance, filetype="gguf", **kw)
         # Overwrite labels for model install context
         app = App.get_running_app()
         scale = app.gui_scale_factor if app else 1.0
