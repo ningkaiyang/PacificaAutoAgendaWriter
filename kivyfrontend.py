@@ -1623,6 +1623,7 @@ class PacificaAgendaApp(App):
         self._build_settings()
         self._build_help()
         self._build_credits()
+        self._build_model_install() # Ensure ModelInstallScreen is rebuilt
         
         # Restore necessary state
         self._update_model_status()
@@ -2067,23 +2068,30 @@ class PacificaAgendaApp(App):
         # This method is called right before the help screen is displayed.
         # It builds the help text with the current CSV header configuration.
         help_text = (
-            "[size=42][b]Welcome to the Agenda Summary Generator v3.0![/b][/size]\n\n"
+            "[size=42][b]Welcome to the Agenda Summary Generator v4.0![/b][/size]\n\n"
             "This guide will walk you through using the application, from initial setup to generating your first report.\n\n"
             
-            "[size=34][b]Part 1: First-Time Setup[/b][/size]\n\n"
-            "[size=30][b]Step 1: Install the AI Model[/b][/size]\n"
-            "You have two options:\n"
-            "1. [b]Offline Install (Recommended for No-Internet Environments)[/b]\n"
-            "   • Click 'Install' in Settings – the screen will shift to the [b]Install Model[/b] page.\n"
-            "   • Drag and drop the provided *.gguf* file, or click to browse.\n"
-            "   • The file is copied locally and the model is ready — [b]no internet required[/b].\n"
-            "2. [b]Download from HuggingFace (Requires Internet)[/b]\n"
-            "   • On the Install Model page, click 'Download Model from HuggingFace Online'.\n"
-            "   • The ~4 GB model will download automatically.\n"
-            "\n"
+            "[size=34][b]Part 1: First-Time Setup & Model Management[/b][/size]\n\n"
+            "[size=30][b]Step 1: Install an AI Model[/b][/size]\n"
+            "Before you can generate reports, you need at least one AI model installed. To begin, navigate to [b]Settings[/b] and click the '[b]Model Settings[/b]' button. This will take you to the 'Install Models' screen.\n\n"
+            "You have two ways to add a model:\n\n"
+            "1. [b]Install the Recommended Model (Requires Internet)[/b]\n"
+            "   • This is the easiest way to get started.\n"
+            "   • Click the large button at the bottom: '[b]Download Qwen3-4B-Q6_K.gguf from Online[/b]'.\n"
+            "   • The application will download the recommended model (approx. 4 GB) and install it for you. This may take a few minutes.\n\n"
+            "2. [b]Install a Custom Model from a File (Offline)[/b]\n"
+            "   • This option is for installing any GGUF-format model you have saved on your computer.\n"
+            "   • In the large upload area, either [b]click to browse[/b] for a `.gguf` file or [b]drag and drop[/b] the file directly onto the zone.\n"
+            "   • The model file will be copied into the application's data folder and become available for use.\n\n"
+
+            "[size=30][b]Step 2: Selecting and Managing Models[/b][/size]\n"
+            "• Once installed, your models will appear in the '[b]Available Models[/b]' dropdown list on the 'Install Models' screen.\n"
+            "• To use a model for generation, simply [b]select it from the dropdown[/b]. The chosen model will be loaded in the background.\n"
+            "• You can install as many models as you like and switch between them at any time.\n"
+            "• Use the '[b]Refresh[/b]' button to update the list if you've manually added files, and the '[b]Delete Model[/b]' button to remove the currently selected model from your system.\n\n"
 
             "[size=34][b]Part 2: Generating a Report[/b][/size]\n\n"
-            "[size=30][b]Step 2: Prepare Your CSV File[/b][/size]\n"
+            "[size=30][b]Step 3: Prepare Your CSV File[/b][/size]\n"
             "• Your data must be in a Comma-Separated Value (.csv) file.\n"
             "• The app needs specific column headers to find the data. By default, it looks for:\n"
             f"    - \"[b]{self.csv_headers['date']}[/b]\" for the Meeting Date\n"
@@ -2093,27 +2101,28 @@ class PacificaAgendaApp(App):
             f"    - \"[b]{self.csv_headers['include']}[/b]\" to automatically select an item (the cell value must be '[b]Y[/b]')\n"
             "• [b]IMPORTANT[/b]: For the app to correctly identify which rows are agenda items, the value in your 'date' column must start with a number (e.g., '01-Jan-2024' or '1/1/24').\n\n"
 
-            "[size=30][b]Step 3: Upload Your File[/b][/size]\n"
+            "[size=30][b]Step 4: Upload Your File[/b][/size]\n"
             "• On the home screen, either [b]drag and drop[/b] your .csv file onto the large upload area, or [b]click the area[/b] to open a file browser.\n\n"
 
-            "[size=30][b]Step 4: Review and Select Items[/b][/size]\n"
+            "[size=30][b]Step 5: Review and Select Items[/b][/size]\n"
             "• After uploading, you'll see a list of all agenda items found in your file.\n"
             "• Items are automatically checked if their '[b]Include[/b]' column was 'Y'.\n"
             "• You can manually check or uncheck any item by clicking on it.\n"
             "• Use the '[b]Select All[/b]' and '[b]Deselect All[/b]' buttons for quick changes.\n\n"
             
-            "[size=30][b]Step 5: Generate the Summary[/b][/size]\n"
+            "[size=30][b]Step 6: Generate the Summary[/b][/size]\n"
             "• Once you're happy with your selections, click the '[b]Generate[/b]' button.\n"
             "• You will be taken to a new screen where you can see the AI generating the report in real-time.\n"
             "• The output window and debug console (if enabled) will scroll automatically.\n\n"
 
-            "[size=30][b]Step 6: Save or Copy Your Report[/b][/size]\n"
+            "[size=30][b]Step 7: Save or Copy Your Report[/b][/size]\n"
             "• When the process is finished, the '[b]Save[/b]' and '[b]Copy[/b]' buttons will become active.\n"
             "• A notification sound will play, and the app window will come to the front.\n"
             "• Click '[b]Save[/b]' to save the report as a formatted Microsoft Word (.docx) file. Alternatively, click '[b]Copy[/b]' to copy the entire report text to your clipboard for pasting elsewhere.\n\n"
 
             "[size=34][b]Part 3: Advanced Settings[/b][/size]\n\n"
             "The Settings screen provides powerful customization options:\n"
+            "• [b]Model Settings[/b]: This button takes you to the model installation and management screen, as described in Part 1.\n"
             "• [b]CSV Column Headers[/b]: If your CSV file uses different header names (e.g., 'Meeting_Date' instead of 'MEETING DATE'), you can change what the app looks for here. Click each button ('Date', 'Section', etc.) to edit the corresponding header name.\n"
             "• [b]Prompt Templates[/b]: Advanced users can edit the instructions (prompts) given to the AI. This allows for fine-tuning the summarization and formatting style.\n"
             "• [b]Debug Mode[/b]: Toggling this on will show a detailed debug console on the generation screen, which is useful for troubleshooting. It displays the exact text sent to the AI and performance metrics like generation speed.\n"
