@@ -47,7 +47,7 @@ Click "Download Model from HuggingFace Online" on the Install Model page and fol
 2.  **Install Model (First Time Only):** Upon the first launch, navigate to the `Settings` menu and click the `Install` button to download the required AI model. This is a one-time setup.
 3.  **Prepare CSV:** Ensure your agenda data is in a `.csv` file. The column headers should match the application's settings (which can be configured).
 4.  **Upload File:** Drag and drop your `.csv` file onto the main window or use the upload area to browse for it.
-5.  **Review Items:** A new screen will appear showing all agenda items. Items flagged for inclusion will be pre-selected. Review and toggle selections as needed.
+5.  **Review Items:** A new screen will appear showing all agenda items. Items flagged for inclusion ('Y' or 'Yes' in the Include column, case-insensitive) will be pre-selected. Review and toggle selections as needed.
 6.  **Generate:** Click the "Generate" button to start the AI summarization process.
 7.  **Save or Copy:** Once complete, you can save the report as a `.docx` file or copy the full text to your clipboard.
 8.  **Switch Models (Optional):** At any time open **Settings → Model Settings** and pick a different model from the drop-down. The new model loads in the background.

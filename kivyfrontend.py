@@ -1181,8 +1181,9 @@ class PacificaAgendaApp(App):
         self.items_container.clear_widgets()
 
         for idx, row in enumerate(self.filtered_items):
-            # only mark pre-selected if flagged Y
-            include_flag = str(row.get(self.csv_headers["include"], "")).upper() == "Y"
+            # pre-select if Include column is 'y' or 'yes' (case-insensitive)
+            include_val = str(row.get(self.csv_headers["include"], "")).strip().lower()
+            include_flag = include_val in ("y", "yes")
 
             # Extract individual column data
             # Get the ignore_brackets setting
@@ -2099,7 +2100,7 @@ class PacificaAgendaApp(App):
             f"    - \"[b]{self.csv_headers['section']}[/b]\" for the Agenda Section\n"
             f"    - \"[b]{self.csv_headers['item']}[/b]\" for the Agenda Item Title\n"
             f"    - \"[b]{self.csv_headers['notes']}[/b]\" for any additional notes\n"
-            f"    - \"[b]{self.csv_headers['include']}[/b]\" to automatically select an item (the cell value must be '[b]Y[/b]')\n"
+            f"    - \"[b]{self.csv_headers['include']}[/b]\" to automatically select an item (cell value '[b]Y[/b]' or '[b]Yes[/b]' — case-insensitive)\n"
             "• [b]IMPORTANT[/b]: For the app to correctly identify which rows are agenda items, the value in your 'date' column must start with a number (e.g., '01-Jan-2024' or '1/1/24').\n\n"
 
             "[size=30][b]Step 4: Upload Your File[/b][/size]\n"
@@ -2107,7 +2108,7 @@ class PacificaAgendaApp(App):
 
             "[size=30][b]Step 5: Review and Select Items[/b][/size]\n"
             "• After uploading, you'll see a list of all agenda items found in your file.\n"
-            "• Items are automatically checked if their '[b]Include[/b]' column was 'Y'.\n"
+            "• Items are automatically checked if their '[b]Include[/b]' column is 'Y' or 'Yes' (case-insensitive).\n"
             "• You can manually check or uncheck any item by clicking on it.\n"
             "• Use the '[b]Select All[/b]' and '[b]Deselect All[/b]' buttons for quick changes.\n"
             "• Toggle '[b]Ignore Bracketed Text[/b]' in settings to filter out text in brackets.\n\n"
