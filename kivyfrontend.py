@@ -1334,7 +1334,7 @@ class PacificaAgendaApp(App):
             # Get the ignore_brackets setting
             ignore_brackets = self.CONF.get("ignore_brackets", False)
 
-            date_text = str(row.get(self.spreadsheet_headers["date"], "")).strip()
+            date_text = self.backend.get_display_date(row.get(self.spreadsheet_headers["date"], ""))
             section_text = str(row.get(self.spreadsheet_headers["section"], "")).replace("\n", " ").replace("•", "-").strip()
             if section_text == "nan":
                 section_text = "placeholder" # Or suitable default/empty string

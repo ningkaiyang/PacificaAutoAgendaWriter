@@ -244,6 +244,14 @@ Report:
 # Backend main class
 # --------------------------------------------------------------------------------------
 class AgendaBackend:
+    @staticmethod
+    def get_display_date(date_value):
+        if isinstance(date_value, (datetime, pd.Timestamp)):
+            if pd.isna(date_value):
+                return ""
+            return date_value.strftime("%d-%b")
+        else:
+            return str(date_value).strip()
     """
     All heavy-lifting lives here.  GUI / CLI frontends interface only via
     the public methods of this class.
@@ -303,7 +311,7 @@ class AgendaBackend:
         # only keep rows where MEETING DATE starts with a digit - actual agenda items
         all_items: List[pd.Series] = []
         for _, row in dataframe.iterrows():
-            meeting_date = str(row.get(spreadsheet_headers["date"], "")).strip()
+            meeting_date = self.get_display_date(row.get(spreadsheet_headers["date"], ""))
             if meeting_date and meeting_date[0].isdigit():
                 all_items.append(row)
 
@@ -464,7 +472,7 @@ class AgendaBackend:
             grouped: dict[str, List[pd.Series]] = {}
             ordered_dates: List[str] = []
             for r in rows:
-                date = str(r[spreadsheet_headers["date"]])
+                date = self.get_display_date(r[spreadsheet_headers["date"]])
                 if date not in grouped:
                     grouped[date] = []
                     ordered_dates.append(date)
