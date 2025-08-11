@@ -1,11 +1,11 @@
 """
 Backend for City of Pacifica - Agenda Summary Generator
 Handles:
- • CSV ingestion / validation
- • Local LLM two-pass generation (via llama-cpp-python)
- • Word document creation
+• Spreadsheet ingestion / validation
+• Local LLM two-pass generation (via llama-cpp-python)
+• Word document creation
 
-The class `AgendaBackend` can be used from any frontend (Tkinter,
+The class AgendaBackend can be used from any frontend (Tkinter,
 Qt, CLI, etc.) without modification.
 """
 
@@ -287,7 +287,7 @@ class AgendaBackend:
         self.model_path = full_path
         self._load_llm_model_async(full_path)
 
-    # ------------------------------------------------------------------ CSV helpers
+    # ------------------------------------------------------------------ Spreadsheet helpers
     @staticmethod
     def _validate_headers(df: pd.DataFrame, required_headers: List[str]):
         """Check for required headers and raise ValueError if any are missing."""
@@ -296,14 +296,14 @@ class AgendaBackend:
             missing_str = ", ".join(f"'{h}'" for h in missing_headers)
             raise ValueError(f"The selected sheet is missing required columns: {missing_str}")
 
-    def process_spreadsheet_data(self, dataframe: pd.DataFrame, csv_headers: dict) -> tuple[pd.DataFrame, List[pd.Series]]:
+    def process_spreadsheet_data(self, dataframe: pd.DataFrame, spreadsheet_headers: dict) -> tuple[pd.DataFrame, List[pd.Series]]:
         """Validate headers and filter rows from a DataFrame → return (df, all_items)."""
-        self._validate_headers(dataframe, list(csv_headers.values()))  # Will raise ValueError if invalid
+        self._validate_headers(dataframe, list(spreadsheet_headers.values()))  # Will raise ValueError if invalid
 
         # only keep rows where MEETING DATE starts with a digit - actual agenda items
         all_items: List[pd.Series] = []
         for _, row in dataframe.iterrows():
-            meeting_date = str(row.get(csv_headers["date"], "")).strip()
+            meeting_date = str(row.get(spreadsheet_headers["date"], "")).strip()
             if meeting_date and meeting_date[0].isdigit():
                 all_items.append(row)
 
@@ -400,7 +400,7 @@ class AgendaBackend:
         prompt_template_pass2: str | None = None,
         debug_callback: Callable[[str], None] | None = None,
         ignore_brackets: bool = False,
-        csv_headers: dict | None = None,
+        spreadsheet_headers: dict | None = None,
     ):
         """
         Two-pass streaming generation.
@@ -427,7 +427,7 @@ class AgendaBackend:
                 prompt_template_pass2,
                 debug_callback,
                 ignore_brackets,
-                csv_headers,
+                spreadsheet_headers,
             ),
             daemon=True,
         )
@@ -445,13 +445,13 @@ class AgendaBackend:
         prompt_template_pass2: str | None = None,
         debug_cb: Callable[[str], None] | None = None,
         ignore_brackets: bool = False,
-        csv_headers: dict | None = None,
+        spreadsheet_headers: dict | None = None,
     ):
         gui_filter = GUITokenFilter()
 
         # Define default headers here as a fallback if None are passed
-        if csv_headers is None:
-            csv_headers = {
+        if spreadsheet_headers is None:
+            spreadsheet_headers = {
                 "date": "MEETING DATE",
                 "section": "AGENDA SECTION",
                 "item": "AGENDA ITEM",
@@ -464,7 +464,7 @@ class AgendaBackend:
             grouped: dict[str, List[pd.Series]] = {}
             ordered_dates: List[str] = []
             for r in rows:
-                date = str(r[csv_headers["date"]])
+                date = str(r[spreadsheet_headers["date"]])
                 if date not in grouped:
                     grouped[date] = []
                     ordered_dates.append(date)
@@ -480,21 +480,21 @@ class AgendaBackend:
                         print("\n[backend] Generation cancelled by user.")
                     return
                 items = grouped[md]
-                items.sort(key=lambda x: str(x.get(csv_headers["section"], "")))
+                items.sort(key=lambda x: str(x.get(spreadsheet_headers["section"], "")))
 
                 # Build items text for summarisation pass
                 items_text = ""
                 for it in items:
                     # Pull section, 'placeholder' if none
-                    sec = str(it.get(csv_headers["section"], "N/A")).replace("\n", " ").replace("•", "-").strip()
+                    sec = str(it.get(spreadsheet_headers["section"], "N/A")).replace("\n", " ").replace("•", "-").strip()
                     if sec == "nan" or sec == "":
                         sec = "placeholder"
                     # Pull title, 'unnamed item' if none
-                    title = str(it.get(csv_headers["item"], "N/A")).replace("\n", " ").replace("•", "-").strip()
+                    title = str(it.get(spreadsheet_headers["item"], "N/A")).replace("\n", " ").replace("•", "-").strip()
                     if title == "nan" or title == "":
                         title = "unnamed item"
                     # Pull notes, does not get added at all to entry if none.
-                    notes_val = it.get(csv_headers["notes"])
+                    notes_val = it.get(spreadsheet_headers["notes"])
                     notes = str(notes_val).replace("\n", " ").replace("•", "-").strip()
                     # If ignore brackets, strip from each item only, not across entries.
                     if ignore_brackets:

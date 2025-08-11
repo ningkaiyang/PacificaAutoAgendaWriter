@@ -4,7 +4,7 @@
 This application is designed to significantly streamline the process of creating comprehensive agenda summaries for the City of Pacifica City Council meetings. It operates by directly reading Microsoft Excel (.xlsx) files, allowing users to select a specific sheet for processing. It then leverages a local Large Language Model (LLM) to perform both summarization and categorization of agenda items, and subsequently generates a professionally formatted Microsoft Word (.docx) document that is ready for review and finalization. The goal is to provide an efficient, privacy-focused, and user-friendly tool for managing meeting agenda data.
 
 ## Key Features
-*   **Direct Excel (.xlsx) Handling:** Read Microsoft Excel files directly without needing to export to CSV first.
+*   **Direct Excel (.xlsx) Handling**: Read Microsoft Excel files directly.
 *   **Sheet Selection:** If a workbook contains multiple sheets, you are prompted to select the correct one.
 *   **One-Click Model Installation:** A simple, one-time setup process to download and install the required local LLM directly from the settings menu.
 *   **Full Item Parsing & Auto-Selection:** The application parses all agenda items from your selected Excel sheet and presents them in a clear, scrollable list. Items can be automatically pre-selected for inclusion based on a flag in the source file.

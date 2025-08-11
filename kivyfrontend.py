@@ -88,7 +88,7 @@ PACIFICA_BLUE = "#4682B4"  # headers / accents
 PACIFICA_SAND = "#F5F5DC"  # background
 TEXT_COLOR = "#222222"
 
-DEFAULT_CSV_HEADERS = {
+DEFAULT_SPREADSHEET_HEADERS = {
     "date": "MEETING DATE",
     "section": "AGENDA SECTION",
     "item": "AGENDA ITEM",
@@ -402,7 +402,7 @@ class ToggleSwitch(BoxLayout):
 class UploadZone(BoxLayout):
     """Unified drag-and-drop and click upload zone."""
 
-    def __init__(self, app_instance, filetype: str = "csv", **kw):
+    def __init__(self, app_instance, filetype: str = "xlsx", **kw):
         app = App.get_running_app()
         scale = app.gui_scale_factor if app else 1.0
 
@@ -827,7 +827,7 @@ class PacificaAgendaApp(App):
     gui_scale_factor = NumericProperty(1.0)
     backend: AgendaBackend
     screen_manager: ScreenManager = ObjectProperty(None)
-    csv_data: pd.DataFrame | None = None
+    spreadsheet_data: pd.DataFrame | None = None
     filtered_items: List[pd.Series] = []
     selected_indices: set[int] = set()
     generation_cancel_event = threading.Event()
@@ -839,7 +839,7 @@ class PacificaAgendaApp(App):
     meeting_dates_for_report: List[str] = []
     prompt_pass1: str = ""
     prompt_pass2: str = ""
-    csv_headers: dict = {}
+    spreadsheet_headers: dict = {}
 
     debug_console: TextInput | None = None
     sv_debug: ScrollView | None = None
@@ -861,8 +861,10 @@ class PacificaAgendaApp(App):
         # Load prompts from config, with fallback to defaults
         self.prompt_pass1 = self.CONF.get("prompt_pass1") or PROMPT_TEMPLATE_PASS1
         self.prompt_pass2 = self.CONF.get("prompt_pass2") or PROMPT_TEMPLATE_PASS2
-        # Load CSV headers from config, with fallback to defaults
-        self.csv_headers = self.CONF.get("csv_headers") or DEFAULT_CSV_HEADERS.copy()
+        # Load spreadsheet headers from config, with fallback to defaults
+        self.spreadsheet_headers = (
+            self.CONF.get("spreadsheet_headers") or DEFAULT_SPREADSHEET_HEADERS.copy()
+        )
 
     def _load_conf(self) -> dict:
         default_conf = {
@@ -870,7 +872,7 @@ class PacificaAgendaApp(App):
             "model_path": "",       # legacy key kept for migration
             "prompt_pass1": None,
             "prompt_pass2": None,
-            "csv_headers": None,
+            "spreadsheet_headers": None,
             "debug": False,
             "ignore_brackets": False,
             "gui_scale": 1.0,
@@ -879,8 +881,8 @@ class PacificaAgendaApp(App):
             with open(self.config_file, "r", encoding="utf-8") as fp:
                 data = json.load(fp)
                 # Ensure new keys exist for older configs
-                if "csv_headers" not in data:
-                    data["csv_headers"] = DEFAULT_CSV_HEADERS.copy()
+                if "spreadsheet_headers" not in data:
+                    data["spreadsheet_headers"] = DEFAULT_SPREADSHEET_HEADERS.copy()
                 if "ignore_brackets" not in data:
                     data["ignore_brackets"] = False
                 if "gui_scale" not in data:
@@ -892,7 +894,7 @@ class PacificaAgendaApp(App):
                 default_conf.update(data)
         except Exception:
             # On first run or error, populate with defaults
-            default_conf["csv_headers"] = DEFAULT_CSV_HEADERS.copy()
+            default_conf["spreadsheet_headers"] = DEFAULT_SPREADSHEET_HEADERS.copy()
         return default_conf
 
     def _save_conf(self):
@@ -1040,7 +1042,7 @@ class PacificaAgendaApp(App):
 
     def _open_file_browser(self, filetype: str):
         # try native dialog first
-        if filetype == "csv":
+        if filetype == "xlsx":
             title = "Select Excel File"
             if platform == "macosx":
                 # On macOS, don't filter to avoid greyed-out files. We'll validate post-selection.
@@ -1066,7 +1068,7 @@ class PacificaAgendaApp(App):
         if selection is not None:
             if selection:  # If list is not empty (file was selected)
                 path = selection[0]
-                if filetype == "csv":
+                if filetype == "xlsx":
                     if not path.lower().endswith(".xlsx"):
                         self._show_error("Invalid File Type", "Please select a Microsoft Excel .xlsx file.")
                         return
@@ -1076,7 +1078,7 @@ class PacificaAgendaApp(App):
             return  # Return here to prevent Kivy fallback
         
         # fallback to kivy file chooser
-        if filetype == "csv":
+        if filetype == "xlsx":
             # On macOS, allow all files and post-validate like native. Else, filter to .xlsx for convenience.
             kivy_filters = None if platform == "macosx" else ["*.xlsx"]
             popup_title = "Select Excel File"
@@ -1096,7 +1098,7 @@ class PacificaAgendaApp(App):
         def _file_chosen(instance, selection, touch):
             if selection:
                 path = selection[0]
-                if filetype == "csv" and not path.lower().endswith(".xlsx"):
+                if filetype == "xlsx" and not path.lower().endswith(".xlsx"):
                     # Keep popup open; inform user of invalid selection
                     self._show_error("Invalid File Type", "Please select a Microsoft Excel .xlsx file.")
                     return
@@ -1244,7 +1246,7 @@ class PacificaAgendaApp(App):
             df = pd.read_excel(filepath, sheet_name=sheet_name)
             
             # Process through the backend
-            self.csv_data, self.filtered_items = self.backend.process_spreadsheet_data(df, self.csv_headers)
+            self.spreadsheet_data, self.filtered_items = self.backend.process_spreadsheet_data(df, self.spreadsheet_headers)
             
             # Navigate to review screen
             self._populate_review_list()
@@ -1330,23 +1332,23 @@ class PacificaAgendaApp(App):
 
         for idx, row in enumerate(self.filtered_items):
             # pre-select if Include column is 'y' or 'yes' (case-insensitive)
-            include_val = str(row.get(self.csv_headers["include"], "")).strip().lower()
+            include_val = str(row.get(self.spreadsheet_headers["include"], "")).strip().lower()
             include_flag = include_val in ("y", "yes")
 
             # Extract individual column data
             # Get the ignore_brackets setting
             ignore_brackets = self.CONF.get("ignore_brackets", False)
 
-            date_text = str(row.get(self.csv_headers["date"], "")).strip()
-            section_text = str(row.get(self.csv_headers["section"], "")).replace("\n", " ").replace("•", "-").strip()
+            date_text = str(row.get(self.spreadsheet_headers["date"], "")).strip()
+            section_text = str(row.get(self.spreadsheet_headers["section"], "")).replace("\n", " ").replace("•", "-").strip()
             if section_text == "nan":
                 section_text = "placeholder" # Or suitable default/empty string
-            item_text = str(row.get(self.csv_headers["item"], "")).replace("\n", " ").replace("•", "-").strip()
+            item_text = str(row.get(self.spreadsheet_headers["item"], "")).replace("\n", " ").replace("•", "-").strip()
             if item_text == "nan":
                 item_text = "unnamed item" # Or suitable default/empty string
             notes_text = ""
-            if pd.notna(row.get(self.csv_headers["notes"])):
-                n = str(row[self.csv_headers["notes"]]).replace("\n", " ").replace("•", "-").strip()
+            if pd.notna(row.get(self.spreadsheet_headers["notes"])):
+                n = str(row[self.spreadsheet_headers["notes"]]).replace("\n", " ").replace("•", "-").strip()
                 if n and n.lower() != "nan":
                     notes_text = n
             
@@ -1574,7 +1576,7 @@ class PacificaAgendaApp(App):
         grid.add_widget(label_prompts)
         grid.add_widget(control_prompts)
 
-        # CSV Headers row
+        # Spreadsheet Headers row
         label_headers = Label(
             text="Spreadsheet Column Required Header Names",
             color=[0, 0, 0, 1],
@@ -1756,7 +1758,7 @@ class PacificaAgendaApp(App):
     def _rebuild_ui(self):
         """
         Clears and rebuilds the entire UI to apply scaling changes.
-        Preserves essential state like loaded CSV data.
+        Preserves essential state like loaded spreadsheet data.
         """
         # Store current screen to return to it after rebuild
         current_screen = self.screen_manager.current
@@ -2016,7 +2018,7 @@ class PacificaAgendaApp(App):
         content.add_widget(info_label)
 
         text_input = TextInput(
-            text=self.csv_headers.get(header_key, ""),
+            text=self.spreadsheet_headers.get(header_key, ""),
             font_size=24,
             multiline=False,
             size_hint_y=None,
@@ -2042,14 +2044,14 @@ class PacificaAgendaApp(App):
             if not new_header:
                 self._show_error("Invalid Header", "Header name cannot be empty.")
                 return
-            self.csv_headers[header_key] = new_header
-            self.CONF["csv_headers"] = self.csv_headers
+            self.spreadsheet_headers[header_key] = new_header
+            self.CONF["spreadsheet_headers"] = self.spreadsheet_headers
             self._save_conf()
             self._show_info(f"'{title_text}' header saved.")
             popup.dismiss()
 
         def on_reset(*_):
-            text_input.text = DEFAULT_CSV_HEADERS[header_key]
+            text_input.text = DEFAULT_SPREADSHEET_HEADERS[header_key]
 
         def on_cancel(*_):
             popup.dismiss()
@@ -2248,7 +2250,7 @@ class PacificaAgendaApp(App):
 
     def _update_help_text(self, *args):
         # This method is called right before the help screen is displayed.
-        # It builds the help text with the current CSV header configuration.
+        # It builds the help text with the current spreadsheet header configuration.
         help_text = (
             "[size=42][b]Welcome to the Agenda Summary Generator v4.0![/b][/size]\n\n"
             "This guide will walk you through using the application, from initial setup to generating your first report.\n\n"
@@ -2277,11 +2279,11 @@ class PacificaAgendaApp(App):
             "• Your data must be in a Microsoft Excel (.xlsx) file.\n"
             "• If your file has multiple sheets, the app will prompt you to select which one contains your agenda data.\n"
             "• The selected sheet needs specific column headers to find the data. By default, it looks for:\n"
-            f"    - \"[b]{self.csv_headers['date']}[/b]\" for the Meeting Date\n"
-            f"    - \"[b]{self.csv_headers['section']}[/b]\" for the Agenda Section\n"
-            f"    - \"[b]{self.csv_headers['item']}[/b]\" for the Agenda Item Title\n"
-            f"    - \"[b]{self.csv_headers['notes']}[/b]\" for any additional notes\n"
-            f"    - \"[b]{self.csv_headers['include']}[/b]\" to automatically select an item (cell value '[b]Y[/b]' or '[b]Yes[/b]' — case-insensitive)\n"
+            f"    - \"[b]{self.spreadsheet_headers['date']}[/b]\" for the Meeting Date\n"
+            f"    - \"[b]{self.spreadsheet_headers['section']}[/b]\" for the Agenda Section\n"
+            f"    - \"[b]{self.spreadsheet_headers['item']}[/b]\" for the Agenda Item Title\n"
+            f"    - \"[b]{self.spreadsheet_headers['notes']}[/b]\" for any additional notes\n"
+            f"    - \"[b]{self.spreadsheet_headers['include']}[/b]\" to automatically select an item (cell value '[b]Y[/b]' or '[b]Yes[/b]' — case-insensitive)\n"
             "• [b]IMPORTANT[/b]: For the app to correctly identify which rows are agenda items, the value in your 'date' column must start with a number (e.g., '01-Jan-2024' or '1/1/24').\n\n"
 
             "[size=30][b]Step 4: Upload Your File[/b][/size]\n"
@@ -2579,7 +2581,7 @@ class PacificaAgendaApp(App):
                 prompt_template_pass2=self.prompt_pass2,
                 debug_callback=debug_cb,
                 ignore_brackets=self.CONF.get("ignore_brackets", False),
-                csv_headers=self.csv_headers,
+                spreadsheet_headers=self.spreadsheet_headers,
             )
         except RuntimeError as exc:
             self._show_error("Model Error", str(exc))
