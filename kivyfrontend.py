@@ -1146,19 +1146,27 @@ class PacificaAgendaApp(App):
             size_hint_y=None,
             height=40 * scale,
             font_size=24 * scale,
-            color=[0, 0, 0, 1]
+            color=[1, 1, 1, 1]
         )
         content.add_widget(label)
 
         # Scrollable list of sheet names
         from math import ceil
         row_height = 60 * scale
-        max_visible_rows = 6  # show up to 6 rows before scrolling
-        scroll_height = max(row_height, min(len(sheet_names), max_visible_rows) * row_height + 10 * scale)
 
-        scroll = ScrollView(size_hint_y=None, height=scroll_height, scroll_wheel_distance=150 * scale)
+        scroll = ScrollView(size_hint_y=1, scroll_wheel_distance=15 * scale)
         list_container = BoxLayout(orientation='vertical', spacing=6 * scale, size_hint_y=None)
         list_container.bind(minimum_height=list_container.setter('height'))
+
+        # Add white background to list_container to fill empty space
+        with list_container.canvas.before:
+            Color(1, 1, 1, 1)
+            self.list_rect = Rectangle(pos=list_container.pos, size=list_container.size)
+        def update_rect(instance, value):
+            self.list_rect.pos = instance.pos
+            self.list_rect.size = instance.size
+        list_container.bind(pos=update_rect, size=update_rect)
+
         scroll.add_widget(list_container)
         content.add_widget(scroll)
 
