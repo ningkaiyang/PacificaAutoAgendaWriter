@@ -2279,7 +2279,7 @@ class PacificaAgendaApp(App):
             f"    - \"[b]{self.spreadsheet_headers['item']}[/b]\" for the Agenda Item Title\n"
             f"    - \"[b]{self.spreadsheet_headers['notes']}[/b]\" for any additional notes\n"
             f"    - \"[b]{self.spreadsheet_headers['include']}[/b]\" to automatically select an item (cell value '[b]Y[/b]' or '[b]Yes[/b]' — case-insensitive)\n"
-            "• [b]IMPORTANT[/b]: For the app to correctly identify which rows are agenda items, the value in your 'date' column must start with a number (e.g., '01-Jan-2024' or '1/1/24').\n\n"
+            "• [b]IMPORTANT[/b]: For the app to correctly identify which rows are agenda items, the value in your 'date' column must start with a number in specifically [date]-[3-letter-month] format (e.g., '01-Jan' or '31-Dec').\n\n"
 
             "[size=30][b]Step 4: Upload Your File[/b][/size]\n"
             "• On the home screen, either [b]drag and drop[/b] your .xlsx file onto the large upload area, or [b]click the area[/b] to open a file browser.\n"
