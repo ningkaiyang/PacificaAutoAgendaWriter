@@ -901,8 +901,13 @@ class PacificaAgendaApp(App):
         try:
             with open(self.config_file, "w", encoding="utf-8") as fp:
                 json.dump(self.CONF, fp, indent=2)
-        except Exception:
-            pass
+        except Exception as e:
+            # Inform the user rather than failing silently
+            self._show_error(
+                "Settings Save Error",
+                f"Unable to save settings to:\n{self.config_file}\n\n"
+                f"This means recent changes may not persist.\n\nDetails: {e}"
+            )
 
     def build(self):
         Window.clearcolor = StyledButton.hex2rgba(PACIFICA_SAND, 1)
