@@ -1669,10 +1669,40 @@ class PacificaAgendaApp(App):
         else:
             self.model_spinner.text = "Select Model"
 
+        # Manually update visuals to ensure the color is always correct,
+        # especially on initial load.
+        self._update_spinner_visuals(self.model_spinner, self.model_spinner.text)
+
+    def _on_spinner_click(self, spinner):
+        """Called when the spinner button is clicked, before the dropdown opens."""
+        # If the dropdown is about to open but has no items, show an info message.
+        if not spinner.values:
+            self._show_info("No Models Installed",
+                            "Please install a model first.\n\n"
+                            "You can download the recommended model using the button below, "
+                            "or drag and drop a .gguf file into the upload area.")
+
+    def _update_spinner_visuals(self, spinner, text):
+        """Sets the spinner's visual state based on the selected text."""
+        if text == "Select Model":
+            # Highlight with green if no model is selected
+            spinner.background_normal = ''
+            spinner.background_down = ''
+            spinner.background_color = StyledButton.hex2rgba("#5CB85C", 1.0)
+        else:
+            # A model is selected, so revert to default spinner appearance
+            spinner.background_normal = 'atlas://data/images/defaulttheme/spinner'
+            spinner.background_down = 'atlas://data/images/defaulttheme/spinner_pressed'
+            spinner.background_color = (1, 1, 1, 1) # Reset tint
+
     def _on_model_selected(self, spinner, text):
-        """User picked a model from the dropdown."""
+        """User picked a model from the dropdown. This triggers a model load."""
+        self._update_spinner_visuals(spinner, text)
+
         if text == "Select Model":
             return
+
+        # This part is the action that should only happen on user selection.
         try:
             self.backend.load_model_by_filename(text)
             self.CONF["current_model"] = text
@@ -1681,6 +1711,8 @@ class PacificaAgendaApp(App):
             self._update_model_status()
         except Exception as e:
             self._show_error("Model Load Error", str(e))
+            # On error, refresh dropdown to revert selection and color.
+            self._refresh_models_dropdown()
 
     def _confirm_delete_model(self):
         """Ask user confirmation before deleting the selected model."""
@@ -2304,8 +2336,10 @@ class PacificaAgendaApp(App):
         self.model_spinner = Spinner(text="Select Model",
                                      values=self.backend.get_available_models(),
                                      size_hint=(None,None), width=600*scale, height=75*scale,
-                                     font_size=28*scale)
+                                     font_size=28*scale,
+                                     background_normal='')
         self.model_spinner.bind(text=self._on_model_selected)
+        self.model_spinner.bind(on_release=self._on_spinner_click)
         refresh_btn = StyledButton(text="Refresh", size_hint=(None,None), width=150, height=75)
         refresh_btn.bind(on_release=lambda *_: self._refresh_models_dropdown())
         del_btn = StyledButton(text="Delete Model", bg_color_name_override="#D9534F",
