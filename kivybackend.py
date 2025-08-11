@@ -1,11 +1,11 @@
 """
 Backend for City of Pacifica - Agenda Summary Generator
 Handles:
- • CSV ingestion / validation
- • Local LLM two-pass generation (via llama-cpp-python)
- • Word document creation
+• Spreadsheet ingestion / validation
+• Local LLM two-pass generation (via llama-cpp-python)
+• Word document creation
 
-The class `AgendaBackend` can be used from any frontend (Tkinter,
+The class AgendaBackend can be used from any frontend (Tkinter,
 Qt, CLI, etc.) without modification.
 """
 
@@ -30,11 +30,12 @@ from llama_cpp import Llama
 MODEL_REPO = "unsloth/Qwen3-4B-GGUF"
 MODEL_FILENAME = "Qwen3-4B-Q6_K.gguf"
 
-# Optional - only for simple speed / memory debug
-try:
-    import resource
-except ImportError:  # pragma: no cover  (Windows)
-    resource = None  # type: ignore
+# resource module is Unix-specific, so we remove it for Windows compatibility.
+resource = None
+
+class ModelNotFoundError(FileNotFoundError):
+    """Raised when a requested GGUF model file cannot be found in the expected folder."""
+    pass
 
 # --------------------------------------------------------------------------------------
 # Helpers
@@ -44,7 +45,7 @@ def logical_cores() -> int:
 
 
 def default_threads() -> int:
-    return max(1, logical_cores() // 2)
+    return max(1, logical_cores() - 4)
 
 
 @contextlib.contextmanager
@@ -85,10 +86,7 @@ class TokenStreamer:
             stats.append(f"\nAverage speed: {self._tok/dt:.2f} tok/s")
             stats.append(f"Tokens: {self._tok}")
             stats.append(f"Elapsed Time: {dt:.2f}s")
-            # memory usage on macOS is in bytes, so i'll convert to MB
-            if resource:
-                mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 / 1024
-                stats.append(f"Peak Memory Usage: {mem_mb:.2f} MB")
+            # Peak memory usage reporting is disabled as it's not cross-platform.
             
             stats_str = "\n".join(stats)
             
@@ -246,6 +244,14 @@ Report:
 # Backend main class
 # --------------------------------------------------------------------------------------
 class AgendaBackend:
+    @staticmethod
+    def get_display_date(date_value):
+        if isinstance(date_value, (datetime, pd.Timestamp)):
+            if pd.isna(date_value):
+                return ""
+            return date_value.strftime("%d-%b")
+        else:
+            return str(date_value).strip()
     """
     All heavy-lifting lives here.  GUI / CLI frontends interface only via
     the public methods of this class.
@@ -258,55 +264,84 @@ class AgendaBackend:
         # if self.model_path and os.path.exists(self.model_path):
         #     self._load_llm_model_async()  # Non-blocking
 
-    # ------------------------------------------------------------------ CSV helpers
+    # ----------------------------  Multi-Model helpers  ----------------------------
+    def _get_models_dir(self) -> str:
+        """Return the absolute path to the models directory inside user_data_dir."""
+        if not self.user_data_dir:
+            raise ValueError("user_data_dir not set – cannot resolve models directory")
+        models_dir = os.path.join(self.user_data_dir, "models")
+        os.makedirs(models_dir, exist_ok=True)
+        return models_dir
+
+    def get_available_models(self) -> List[str]:
+        """List *.gguf files (filenames only) available in the models directory."""
+        try:
+            models_dir = self._get_models_dir()
+            return sorted([f for f in os.listdir(models_dir) if f.lower().endswith(".gguf")])
+        except Exception:
+            return []
+
+    def load_model_by_filename(self, filename: str):
+        """
+        Load the GGUF model identified by its filename (blocking call wrapper).
+        The actual heavy loading runs in a background thread via _load_llm_model_async().
+        """
+        if not filename:
+            raise ValueError("Filename must be provided")
+        full_path = os.path.join(self._get_models_dir(), filename)
+        if not os.path.exists(full_path):
+            raise ModelNotFoundError(f"Model file not found: {full_path}")
+        # Update state then async-load
+        self.model_path = full_path
+        self._load_llm_model_async(full_path)
+
+    # ------------------------------------------------------------------ Spreadsheet helpers
     @staticmethod
     def _validate_headers(df: pd.DataFrame, required_headers: List[str]):
         """Check for required headers and raise ValueError if any are missing."""
         missing_headers = [h for h in required_headers if h not in df.columns]
         if missing_headers:
             missing_str = ", ".join(f"'{h}'" for h in missing_headers)
-            raise ValueError(f"CSV file is missing required columns: {missing_str}")
+            raise ValueError(f"The selected sheet is missing required columns: {missing_str}")
 
-    def process_csv(self, filepath: str, csv_headers: dict) -> tuple[pd.DataFrame, List[pd.Series]]:
-        """Read CSV, validate headers, filter rows → return (df, all_items)."""
-        try:
-            # Use the 'python' engine for more robust parsing of potentially
-            # irregular CSV files. It can handle rows with differing numbers
-            # of columns, which is common in this project's source files.
-            df = pd.read_csv(filepath, engine="python")
-        except Exception as e:
-            # Catch file read errors (e.g., file not found, permission error)
-            # and other pandas parsing errors.
-            raise ValueError(f"Failed to read or parse CSV file: {e}")
-
-        self._validate_headers(df, list(csv_headers.values()))  # Will raise ValueError if invalid
+    def process_spreadsheet_data(self, dataframe: pd.DataFrame, spreadsheet_headers: dict) -> tuple[pd.DataFrame, List[pd.Series]]:
+        """Validate headers and filter rows from a DataFrame → return (df, all_items)."""
+        self._validate_headers(dataframe, list(spreadsheet_headers.values()))  # Will raise ValueError if invalid
 
         # only keep rows where MEETING DATE starts with a digit - actual agenda items
         all_items: List[pd.Series] = []
-        for _, row in df.iterrows():
-            meeting_date = str(row.get(csv_headers["date"], "")).strip()
+        for _, row in dataframe.iterrows():
+            meeting_date = self.get_display_date(row.get(spreadsheet_headers["date"], ""))
             if meeting_date and meeting_date[0].isdigit():
                 all_items.append(row)
 
         if not all_items:
-            raise RuntimeError("No valid agenda item rows found in the CSV.")
-        return df, all_items
+            raise RuntimeError("No valid agenda item rows found in the selected sheet.")
+        return dataframe, all_items
 
     # ------------------------------------------------------------------ LLM loading
-    def _load_llm_model_async(self):
+    def _load_llm_model_async(self, model_path: str | None = None):
+        """
+        Load the llama.cpp model asynchronously.
+        If model_path is None, falls back to self.model_path.
+        """
+        path_to_load = model_path or self.model_path
+
         def _loader():
             try:
-                if not self.model_path or not os.path.exists(self.model_path):
-                    print(f"[backend] Model file not found: {self.model_path}")
+                if not path_to_load or not os.path.exists(path_to_load):
+                    print(f"[backend] Model file not found: {path_to_load}")
                     return
                 with suppress_stderr():
                     self.llm_model = Llama(
-                        model_path=self.model_path,
+                        model_path=path_to_load,
                         chat_format="chatml",
                         n_ctx=10000,
                         n_threads=default_threads(),
                         verbose=False,
+                        n_gpu_layers=-1,
                     )
+                print(f"[backend] Model loaded: {path_to_load}")
             except Exception as exc:
                 traceback.print_exc()
                 print(f"[backend] Failed to load model: {exc}")
@@ -341,12 +376,15 @@ class AgendaBackend:
                     chat_format="chatml",
                     n_ctx=10000,
                     n_threads=default_threads(),
+                    n_gpu_layers=-1,
                 )
 
+            final_model_path = new_llm_instance.model_path
+            
             # The model is now loaded, assign it to the backend
             self.llm_model = new_llm_instance
             # Get the actual path string from the instance
-            final_model_path = self.llm_model.model_path
+            self.model_path = final_model_path
 
             print(f"[backend] Model downloaded and loaded from: {final_model_path}")
             if done_callback:
@@ -370,7 +408,7 @@ class AgendaBackend:
         prompt_template_pass2: str | None = None,
         debug_callback: Callable[[str], None] | None = None,
         ignore_brackets: bool = False,
-        csv_headers: dict | None = None,
+        spreadsheet_headers: dict | None = None,
     ):
         """
         Two-pass streaming generation.
@@ -397,7 +435,7 @@ class AgendaBackend:
                 prompt_template_pass2,
                 debug_callback,
                 ignore_brackets,
-                csv_headers,
+                spreadsheet_headers,
             ),
             daemon=True,
         )
@@ -415,13 +453,13 @@ class AgendaBackend:
         prompt_template_pass2: str | None = None,
         debug_cb: Callable[[str], None] | None = None,
         ignore_brackets: bool = False,
-        csv_headers: dict | None = None,
+        spreadsheet_headers: dict | None = None,
     ):
         gui_filter = GUITokenFilter()
 
         # Define default headers here as a fallback if None are passed
-        if csv_headers is None:
-            csv_headers = {
+        if spreadsheet_headers is None:
+            spreadsheet_headers = {
                 "date": "MEETING DATE",
                 "section": "AGENDA SECTION",
                 "item": "AGENDA ITEM",
@@ -434,7 +472,7 @@ class AgendaBackend:
             grouped: dict[str, List[pd.Series]] = {}
             ordered_dates: List[str] = []
             for r in rows:
-                date = str(r[csv_headers["date"]])
+                date = self.get_display_date(r[spreadsheet_headers["date"]])
                 if date not in grouped:
                     grouped[date] = []
                     ordered_dates.append(date)
@@ -450,21 +488,21 @@ class AgendaBackend:
                         print("\n[backend] Generation cancelled by user.")
                     return
                 items = grouped[md]
-                items.sort(key=lambda x: str(x.get(csv_headers["section"], "")))
+                items.sort(key=lambda x: str(x.get(spreadsheet_headers["section"], "")))
 
                 # Build items text for summarisation pass
                 items_text = ""
                 for it in items:
                     # Pull section, 'placeholder' if none
-                    sec = str(it.get(csv_headers["section"], "N/A")).replace("\n", " ").replace("•", "-").strip()
+                    sec = str(it.get(spreadsheet_headers["section"], "N/A")).replace("\n", " ").replace("•", "-").strip()
                     if sec == "nan" or sec == "":
                         sec = "placeholder"
                     # Pull title, 'unnamed item' if none
-                    title = str(it.get(csv_headers["item"], "N/A")).replace("\n", " ").replace("•", "-").strip()
+                    title = str(it.get(spreadsheet_headers["item"], "N/A")).replace("\n", " ").replace("•", "-").strip()
                     if title == "nan" or title == "":
                         title = "unnamed item"
                     # Pull notes, does not get added at all to entry if none.
-                    notes_val = it.get(csv_headers["notes"])
+                    notes_val = it.get(spreadsheet_headers["notes"])
                     notes = str(notes_val).replace("\n", " ").replace("•", "-").strip()
                     # If ignore brackets, strip from each item only, not across entries.
                     if ignore_brackets:
@@ -518,6 +556,9 @@ class AgendaBackend:
                     raw_summary += token
                     think_streamer(chunk)  # count tokens and print for debug
                 think_streamer.done()
+
+                if token_cb:  # if user gui display, then print a newline between
+                    token_cb("\n\n")
 
                 # Clean up summarized_items to remove any incomplete thinking tags
                 # and extract only the actual bullet point content
@@ -603,7 +644,7 @@ class AgendaBackend:
 
     # ------------------------------------------------------------------ Word DOC creation
     @staticmethod
-    def create_word_document(content, meeting_dates):
+    def create_word_document(content, meeting_dates, reporting_year: int):
         """Create the Word document with proper formatting from raw text."""
         doc = Document()
         
@@ -625,8 +666,8 @@ class AgendaBackend:
         # Calculate month range
         if meeting_dates:
             try:
-                # Date format is 'DD-Mon', e.g., '25-Aug'. Assume current year.
-                dates = [datetime.strptime(f"{d}-{datetime.now().year}", "%d-%b-%Y") for d in meeting_dates]
+                # Use the explicitly passed reporting_year
+                dates = [datetime.strptime(f"{d}-{reporting_year}", "%d-%b-%Y") for d in meeting_dates]
                 
                 # The list is chronologically sorted, so min is first, max is last.
                 min_date = dates[0]
@@ -723,8 +764,8 @@ class AgendaBackend:
         doc.add_paragraph()
         
         # Significant items section
-        last_report_date = (datetime.now() - pd.Timedelta(days=60)).strftime("%B %d, %Y")
-        sig_items = doc.add_paragraph(f"Significant Items Completed Since {last_report_date}:")
+        last_report_date = (datetime.now() - pd.Timedelta(days=60)).strftime("%B")
+        sig_items = doc.add_paragraph(f"Significant Items Completed Since {last_report_date} (2 months ago placeholder):")
         sig_items.runs[0].bold = True
         doc.add_paragraph("[Placeholder for user to manually enter items.]")
         

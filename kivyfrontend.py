@@ -51,7 +51,13 @@ except ImportError:
         print("To enable them, run: pip install plyer", file=sys.stderr)
 
 from kivy.graphics import Color, Rectangle, RoundedRectangle
-from kivy.properties import BooleanProperty, ListProperty, ObjectProperty, StringProperty
+from kivy.properties import (
+    BooleanProperty,
+    ListProperty,
+    ObjectProperty,
+    StringProperty,
+    NumericProperty,
+)
 from kivy.uix.widget import Widget
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.boxlayout import BoxLayout
@@ -64,8 +70,9 @@ from kivy.uix.recycleview import RecycleView
 from kivy.uix.recycleview.views import RecycleDataViewBehavior
 from kivy.uix.screenmanager import Screen, ScreenManager, SlideTransition
 from kivy.uix.scrollview import ScrollView
+from kivy.uix.relativelayout import RelativeLayout
+from kivy.uix.spinner import Spinner
 from kivy.uix.textinput import TextInput
-from kivy.uix.widget import Widget
 from kivy.config import Config
 Config.set('input', 'mouse', 'mouse,multitouch_on_demand')
 
@@ -81,7 +88,7 @@ PACIFICA_BLUE = "#4682B4"  # headers / accents
 PACIFICA_SAND = "#F5F5DC"  # background
 TEXT_COLOR = "#222222"
 
-DEFAULT_CSV_HEADERS = {
+DEFAULT_SPREADSHEET_HEADERS = {
     "date": "MEETING DATE",
     "section": "AGENDA SECTION",
     "item": "AGENDA ITEM",
@@ -96,44 +103,54 @@ COLUMN_SIZES = {
     "item": 0.38,   # Corresponds to roughly 400px in customtk
     "notes": 0.35   # Corresponds to roughly 350px in customtk
 }
-COLUMN_PAD = 10     # Padding inside each column's label
-COLUMN_SPACING = 15  # Spacing between columns within an item row
 
 # --------------------------------------------------------------------------------------
 # Native file dialog functions
 # --------------------------------------------------------------------------------------
 def native_open_file_dialog(title="Select File", file_types=None, multiple=False):
-    """open file dialog using native OS dialogs (macOS via osascript)"""
-    if platform == "macosx":
+    """open file dialog using native OS dialogs (macOS via osascript, Windows via tkinter)"""
+    if platform == 'win':
         try:
-            # build applescript command that returns POSIX path directly
-            script = f'''
-            set theFile to choose file with prompt "{title}"
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()  # Hide the main window
+            filepath = filedialog.askopenfilename(
+                title=title,
+                filetypes=file_types
+            )
+            return [filepath] if filepath else []
+        except Exception as e:
+            print(f"native file dialog error on windows: {e}")
+            return None # fallback needed
+
+    elif platform == "macosx":
+        try:
+            # Build the base AppleScript command
+            script = f'choose file with prompt "{title}"'
+
+            # Dynamically build the 'of type' clause from file_types
+            if file_types:
+                allowed_extensions = []
+                for _, pattern in file_types:
+                    # Filter out wildcards like '*.*' and get the extension
+                    if pattern.startswith("*.") and pattern != "*.*":
+                        allowed_extensions.append(pattern[2:])
+                
+                if allowed_extensions:
+                    # Format for AppleScript: {"ext1", "ext2"}
+                    type_list = ", ".join(f'"{ext}"' for ext in allowed_extensions)
+                    script += f' of type {{{type_list}}}'
+            
+            # Finalize the script for osascript
+            full_script = f'''
+            set theFile to {script}
             return POSIX path of theFile
             '''
             
-            # add file type filtering if needed
-            if file_types:
-                # convert file types to applescript format
-                if any("*.csv" in ft[1] for ft in file_types):
-                    script = f'''
-                    set theFile to choose file with prompt "{title}" of type {{"csv"}}
-                    return POSIX path of theFile
-                    '''
-                elif any("*.gguf" in ft[1] for ft in file_types):
-                    script = f'''
-                    set theFile to choose file with prompt "{title}" of type {{"gguf"}}
-                    return POSIX path of theFile
-                    '''
-                elif any("*.bin" in ft[1] for ft in file_types):
-                    script = f'''
-                    set theFile to choose file with prompt "{title}" of type {{"bin"}}
-                    return POSIX path of theFile
-                    '''
-            
             # run osascript
             result = subprocess.run(
-                ["osascript", "-e", script],
+                ["osascript", "-e", full_script],
                 capture_output=True,
                 text=True,
                 timeout=60
@@ -156,8 +173,23 @@ def native_open_file_dialog(title="Select File", file_types=None, multiple=False
 
 
 def native_save_file_dialog(title="Save File", filename="", file_types=None):
-    """save file dialog using native OS dialogs (macOS via osascript)"""
-    if platform == "macosx":
+    """save file dialog using native OS dialogs (macOS via osascript, Windows via tkinter)"""
+    if platform == 'win':
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()  # Hide the main window
+            filepath = filedialog.asksaveasfilename(
+                title=title,
+                initialfile=filename,
+                filetypes=file_types,
+                defaultextension=".docx"
+            )
+            return filepath if filepath else ""
+        except Exception as e:
+            print(f"native file dialog error on windows: {e}")
+    elif platform == "macosx":
         try:
             # build applescript for save dialog that returns POSIX path directly
             script = f'''
@@ -202,6 +234,9 @@ class StyledButton(Button):
     base_bg_color_rgba = ListProperty([0, 0, 0, 0]) # Initial dummy value, will be set in __init__
 
     def __init__(self, bg_color_name_override: str | None = None, **kw):
+        app = App.get_running_app()
+        scale = app.gui_scale_factor if app else 1.0
+
         # Determine the initial base color based on override or default
         initial_hex_color = bg_color_name_override if bg_color_name_override else PACIFICA_BLUE
         self.base_bg_color_rgba = self.hex2rgba(initial_hex_color, 1.0) # Set the ListProperty here
@@ -209,6 +244,13 @@ class StyledButton(Button):
         # set a default font_size if not provided by the caller
         if "font_size" not in kw:
             kw["font_size"] = 26
+        kw["font_size"] = kw["font_size"] * scale
+
+        if "width" in kw and kw["width"] is not None:
+            kw["width"] = kw["width"] * scale
+
+        if "height" in kw and kw["height"] is not None:
+            kw["height"] = kw["height"] * scale
 
         super().__init__(
             background_normal="",
@@ -231,11 +273,11 @@ class StyledButton(Button):
         with self.canvas.before:
             # Drop shadow
             self.shadow_color = Color(0, 0, 0, 0.2)
-            self.shadow = RoundedRectangle(pos=self.pos, size=self.size, radius=[15])
+            self.shadow = RoundedRectangle(pos=self.pos, size=self.size, radius=[15 * scale])
             
             # Main background. Use base_bg_color_rgba for the initial color.
             self.bg_color = Color(*self.base_bg_color_rgba) # Set initial drawing color from the property
-            self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15])
+            self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15 * scale])
 
     def on_mouse_pos(self, *args):
         """check if mouse is over the button"""
@@ -250,8 +292,10 @@ class StyledButton(Button):
 
     def _update_rect(self, *_):
         """update both shadow and main rectangle"""
+        app = App.get_running_app()
+        scale = app.gui_scale_factor if app else 1.0
         # shadow is slightly offset
-        shadow_offset = 3
+        shadow_offset = 3 * scale
         self.shadow.pos = (self.pos[0] + shadow_offset, self.pos[1] - shadow_offset)
         self.shadow.size = self.size
         
@@ -358,30 +402,34 @@ class ToggleSwitch(BoxLayout):
 class UploadZone(BoxLayout):
     """Unified drag-and-drop and click upload zone."""
 
-    def __init__(self, app_instance, **kw):
+    def __init__(self, app_instance, filetype: str = "xlsx", **kw):
+        app = App.get_running_app()
+        scale = app.gui_scale_factor if app else 1.0
+
         super().__init__(
             orientation="vertical",
             size_hint=(1, 0.7),
-            padding=40,
-            spacing=20,
+            padding=40 * scale,
+            spacing=20 * scale,
             **kw,
         )
         self.app_instance = app_instance
+        self.filetype = filetype
         self.is_hovered = False
         self.is_uninstalled_state = False
 
         # create the visual background
         with self.canvas.before:
             Color(*StyledButton.hex2rgba("#FFFFFF", 1))  # white base background
-            self._bg_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15])
+            self._bg_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15 * scale])
             self.overlay_color = Color(*StyledButton.hex2rgba(PACIFICA_BLUE, 0.4))  # blue overlay
-            self._overlay_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15])
+            self._overlay_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15 * scale])
 
         self.bind(pos=self._update_canvas, size=self._update_canvas)
 
         # main upload text/button
         self.upload_label = Label(
-            text="[size=48][b]Click to Upload CSV[/b][/size]\n[size=28]or drag and drop your file here[/size]",
+            text=f"[size={int(48 * scale)}][b]Click to Upload Excel File[/b][/size]\n[size={int(28 * scale)}]or drag and drop your file here[/size]",
             markup=True,
             halign="center",
             valign="middle",
@@ -395,26 +443,28 @@ class UploadZone(BoxLayout):
 
         # file format hint
         self.hint_label = Label(
-            text="[size=22]Supported format: CSV files only[/size]",  # increased font size
+            text=f"[size={int(22 * scale)}]Supported format: Excel files (.xlsx)[/size]",  # increased font size
             markup=True,
             halign="center",
             valign="middle",
             color=[1, 1, 1, 0.8],  # slightly transparent white
             size_hint_y=None,
-            height=35,  # increased height
+            height=35 * scale,  # increased height
         )
         self.hint_label.bind(size=lambda inst, *_: inst.setter("text_size")(inst, (inst.width, None)))
         self.add_widget(self.hint_label)
 
     def set_uninstalled_state(self, is_uninstalled):
+        app = App.get_running_app()
+        scale = app.gui_scale_factor if app else 1.0
         self.is_uninstalled_state = is_uninstalled
         if is_uninstalled:
-            self.upload_label.text = "[size=48][b]App Not Installed[/b][/size]\n[size=28]Please go to Settings to install the model.[/size]"
+            self.upload_label.text = f"[size={int(48 * scale)}][b]Setup Required[/b][/size]\n[size={int(28 * scale)}]Please go to Settings to install the model.[/size]"
             self.hint_label.text = ""
             self.overlay_color.rgba = StyledButton.hex2rgba("#D9534F", 0.7) # Red
         else:
-            self.upload_label.text = "[size=48][b]Click to Upload CSV[/b][/size]\n[size=28]or drag and drop your file here[/size]"
-            self.hint_label.text = "[size=22]Supported format: CSV files only[/size]"
+            self.upload_label.text = f"[size={int(48 * scale)}][b]Click to Upload Excel File[/b][/size]\n[size={int(28 * scale)}]or drag and drop your file here[/size]"
+            self.hint_label.text = f"[size={int(22 * scale)}]Supported format: Excel files (.xlsx)[/size]"
             self.overlay_color.rgba = StyledButton.hex2rgba(PACIFICA_BLUE, 0.4) # Blue
         self._set_hover_state(False)
 
@@ -434,12 +484,13 @@ class UploadZone(BoxLayout):
         """handle clicks anywhere in the upload zone"""
         if self.collide_point(*touch.pos):
             if self.is_uninstalled_state:
-                self.app_instance._navigate_to("settings")
+                # Route directly to Model Settings when no model is installed
+                self.app_instance._navigate_to("model_install")
                 return True
             # add visual feedback by temporarily darkening the zone
             self._set_hover_state(True)
-            # trigger file browser
-            self.app_instance._open_file_browser("csv")
+            # trigger file browser for the configured filetype
+            self.app_instance._open_file_browser(self.filetype)
             return True
         return super().on_touch_down(touch)
 
@@ -465,20 +516,39 @@ class UploadZone(BoxLayout):
             self.overlay_color.rgba = base_color
 
 
+class ModelUploadZone(UploadZone):
+    """UploadZone specialised for .gguf model files."""
+    def __init__(self, app_instance, **kw):
+        super().__init__(app_instance, filetype="gguf", **kw)
+        # Overwrite labels for model install context
+        app = App.get_running_app()
+        scale = app.gui_scale_factor if app else 1.0
+        self.upload_label.text = (
+            f"[size={int(48*scale)}][b]Click to Install Model[/b][/size]\n"
+            f"[size={int(28*scale)}]or drag and drop your .gguf file here[/size]"
+        )
+        self.hint_label.text = f"[size={int(22*scale)}]Accepted file: *.gguf[/size]"
+
+
+    # Hover colour tweak remains inherited.
+
+
 # --------------------------------------------------------------------------------------
 # Simple item widget for the list
 # --------------------------------------------------------------------------------------
 class AgendaItem(BoxLayout):
     def __init__(self, date_text, section_text, item_text, notes_text, index, app, **kwargs):
+        app = App.get_running_app()
+        scale = app.gui_scale_factor if app else 1.0
         # Overall padding for the entire row (checkbox + columns)
-        super().__init__(orientation="horizontal", padding=(20, 15), spacing=15, size_hint_y=None, **kwargs)
+        super().__init__(orientation="horizontal", padding=(20 * scale, 15 * scale), spacing=15 * scale, size_hint_y=None, **kwargs)
         
         self.app = app
         self.index = index
         self.selected = True  # start selected by default
         
         # Checkbox for selection
-        self.checkbox = CheckBox(active=True, size_hint_x=None, width=40)
+        self.checkbox = CheckBox(active=True, size_hint_x=None, width=40 * scale)
         self.checkbox.bind(active=self.on_checkbox_toggle)
         self.add_widget(self.checkbox)
         
@@ -486,8 +556,8 @@ class AgendaItem(BoxLayout):
         self.columns_container = BoxLayout(
             orientation="horizontal",
             size_hint_x=1, # Takes remaining horizontal space
-            spacing=COLUMN_SPACING,
-            padding=COLUMN_PAD # Padding inside the column container itself
+            spacing=15 * scale,
+            padding=10 * scale
         )
         self.add_widget(self.columns_container)
 
@@ -516,6 +586,8 @@ class AgendaItem(BoxLayout):
     
     def _create_label(self, text, size_hint_x_val):
         """Helper to create consistently styled column labels."""
+        app = App.get_running_app()
+        scale = app.gui_scale_factor if app else 1.0
         return Label(
             text=text,
             markup=False,
@@ -525,7 +597,7 @@ class AgendaItem(BoxLayout):
             color=[0, 0, 0, 1],
             size_hint_x=size_hint_x_val,
             size_hint_y=None,  # Important: don't let label stretch vertically by default
-            font_size=26 # Increased font size
+            font_size=26 * scale # Increased font size
         )
     
     def _setup_initial_size(self):
@@ -566,8 +638,10 @@ class AgendaItem(BoxLayout):
         # Set the height of the columns_container to fit the tallest label plus its vertical padding
         self.columns_container.height = max_label_height + (self.columns_container.padding[1] + self.columns_container.padding[3])
         
+        app = App.get_running_app()
+        scale = app.gui_scale_factor if app else 1.0
         # Set the overall AgendaItem (row) height, ensuring a minimum height
-        self.height = max(50, self.columns_container.height + (self.padding[1] + self.padding[3]))
+        self.height = max(50 * scale, self.columns_container.height + (self.padding[1] + self.padding[3]))
 
     
     def on_size(self, *args):
@@ -739,15 +813,21 @@ class CreditsScreen(Screen):
     pass
 
 
+class ModelInstallScreen(Screen):
+    """Screen for offline model installation via drag-and-drop or file chooser."""
+    pass
+
+
 # --------------------------------------------------------------------------------------
 # Main App
 # --------------------------------------------------------------------------------------
 class PacificaAgendaApp(App):
     title = "City of Pacifica - Agenda Summary Generator"
 
+    gui_scale_factor = NumericProperty(1.0)
     backend: AgendaBackend
     screen_manager: ScreenManager = ObjectProperty(None)
-    csv_data: pd.DataFrame | None = None
+    spreadsheet_data: pd.DataFrame | None = None
     filtered_items: List[pd.Series] = []
     selected_indices: set[int] = set()
     generation_cancel_event = threading.Event()
@@ -759,7 +839,7 @@ class PacificaAgendaApp(App):
     meeting_dates_for_report: List[str] = []
     prompt_pass1: str = ""
     prompt_pass2: str = ""
-    csv_headers: dict = {}
+    spreadsheet_headers: dict = {}
 
     debug_console: TextInput | None = None
     sv_debug: ScrollView | None = None
@@ -776,50 +856,60 @@ class PacificaAgendaApp(App):
         self.config_file = os.path.join(self.user_data_dir, "pacifica_agenda_gui.json")
         self.CONF = self._load_conf()
 
+        self.gui_scale_factor = self.CONF.get("gui_scale", 1.0)
+
         # Load prompts from config, with fallback to defaults
         self.prompt_pass1 = self.CONF.get("prompt_pass1") or PROMPT_TEMPLATE_PASS1
         self.prompt_pass2 = self.CONF.get("prompt_pass2") or PROMPT_TEMPLATE_PASS2
-        # Load CSV headers from config, with fallback to defaults
-        self.csv_headers = self.CONF.get("csv_headers") or DEFAULT_CSV_HEADERS.copy()
+        # Load spreadsheet headers from config, with fallback to defaults
+        self.spreadsheet_headers = (
+            self.CONF.get("spreadsheet_headers") or DEFAULT_SPREADSHEET_HEADERS.copy()
+        )
 
     def _load_conf(self) -> dict:
         default_conf = {
-            "model_path": "",
+            "current_model": "",    # <-- NEW
             "prompt_pass1": None,
             "prompt_pass2": None,
-            "csv_headers": None,
+            "spreadsheet_headers": None,
             "debug": False,
             "ignore_brackets": False,
+            "gui_scale": 1.0,
         }
         try:
             with open(self.config_file, "r", encoding="utf-8") as fp:
                 data = json.load(fp)
                 # Ensure new keys exist for older configs
-                if "csv_headers" not in data:
-                    data["csv_headers"] = DEFAULT_CSV_HEADERS.copy()
+                if "spreadsheet_headers" not in data:
+                    data["spreadsheet_headers"] = DEFAULT_SPREADSHEET_HEADERS.copy()
                 if "ignore_brackets" not in data:
                     data["ignore_brackets"] = False
+                if "gui_scale" not in data:
+                    data["gui_scale"] = 1.0
                 default_conf.update(data)
         except Exception:
             # On first run or error, populate with defaults
-            default_conf["csv_headers"] = DEFAULT_CSV_HEADERS.copy()
+            default_conf["spreadsheet_headers"] = DEFAULT_SPREADSHEET_HEADERS.copy()
         return default_conf
 
     def _save_conf(self):
+        self.CONF["gui_scale"] = self.gui_scale_factor
+        # 'current_model' already updated elsewhere; just ensure it's present before save
         try:
             with open(self.config_file, "w", encoding="utf-8") as fp:
                 json.dump(self.CONF, fp, indent=2)
-        except Exception:
-            pass
+        except Exception as e:
+            # Inform the user rather than failing silently
+            self._show_error(
+                "Settings Save Error",
+                f"Unable to save settings to:\n{self.config_file}\n\n"
+                f"This means recent changes may not persist.\n\nDetails: {e}"
+            )
 
     def build(self):
         Window.clearcolor = StyledButton.hex2rgba(PACIFICA_SAND, 1)
-        Window.size = (1280, 720)  # set default window size
-        Window.left = (Window.system_size[0] - Window.width + 500) / 2
-        Window.top = (Window.system_size[1] - Window.height + 700) / 2
         
         self.backend = AgendaBackend(
-            model_path=self.CONF["model_path"],
             user_data_dir=self.user_data_dir,
         )
 
@@ -830,6 +920,7 @@ class PacificaAgendaApp(App):
         self._build_settings()
         self._build_help()
         self._build_credits()
+        self._build_model_install()  # added for offline install screen
 
         # Set initial model status in settings UI
         self._update_model_status()
@@ -840,11 +931,24 @@ class PacificaAgendaApp(App):
         # Update home screen UI based on installation status
         self._update_home_screen_ui()
 
+        # Load selected model if configured
+        self._initialize_model_loading()
+
         # bind drag-and-drop
         if platform in ("win", "linux", "macosx"):
             Window.bind(on_dropfile=self._on_file_drop)
 
         return self.screen_manager
+
+    def on_start(self):
+        """this is called after build() and the window is created, so we can center it"""
+        try:
+            # calculate the position and set it
+            Window.left = 100
+            Window.top = 50
+            Window.maximize()
+        except Exception as e:
+            print(f"could not center window: {e}")
 
     def _navigate_to(self, screen_name: str):
         """navigate to a screen with proper slide direction"""
@@ -863,6 +967,9 @@ class PacificaAgendaApp(App):
         elif current_screen == "generation" and screen_name == "review":
             # going back from generation to review slides right
             self.screen_manager.transition.direction = "right"
+        elif current_screen == "model_install" and screen_name == "settings":
+            # going back from model install to settings slides right
+            self.screen_manager.transition.direction = "right"
         else:
             # default direction for other transitions
             self.screen_manager.transition.direction = "left"
@@ -872,27 +979,28 @@ class PacificaAgendaApp(App):
 
     # ---------------------------------------------------------------- Home
     def _build_home(self):
+        scale = self.gui_scale_factor
         scr = HomeScreen(name="home")
-        root = BoxLayout(orientation="vertical", padding=40, spacing=20)
+        root = BoxLayout(orientation="vertical", padding=40 * scale, spacing=20 * scale)
         scr.add_widget(root)
 
         # logo and header container
-        logo_header = BoxLayout(orientation="horizontal", size_hint=(1, None), height=200, spacing=20)
+        logo_header = BoxLayout(orientation="horizontal", size_hint=(1, None), height=200 * scale, spacing=20 * scale)
         logo_header.add_widget(Widget(size_hint_x=1))  # add spacer to center content
         try:
             from kivy.uix.image import Image as KivyImage
             if os.path.exists("logo.png"):
-                logo = KivyImage(source="logo.png", size_hint=(None, None), size=(180, 180))
+                logo = KivyImage(source="logo.png", size_hint=(None, None), size=(180 * scale, 180 * scale))
                 logo_header.add_widget(logo)
         except Exception:
             pass
         header = Label(
             text="[b]City of Pacifica[/b]\nAgenda Summary Generator",
             markup=True,
-            font_size=36,
+            font_size=36 * scale,
             color=[0, 0, 0, 1],
             size_hint=(2, None),
-            height=180,
+            height=180 * scale,
         )
         header.halign = "center"
         header.valign = "middle"
@@ -905,7 +1013,7 @@ class PacificaAgendaApp(App):
         self.upload_zone = UploadZone(self)
         root.add_widget(self.upload_zone)
 
-        nav_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=75, spacing=15)
+        nav_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=75 * scale, spacing=15 * scale)
         nav_bar.add_widget(Widget())
 
         settings_btn = StyledButton(text="Settings", size_hint=(None, None), width=220, height=75)
@@ -929,9 +1037,22 @@ class PacificaAgendaApp(App):
 
     def _open_file_browser(self, filetype: str):
         # try native dialog first
-        if filetype == "csv":
-            filters = [("CSV files", "*.csv"), ("All files", "*.*")]
-            title = "Select CSV File"
+        if filetype == "xlsx":
+            title = "Select Excel File"
+            if platform == "macosx":
+                # On macOS, don't filter to avoid greyed-out files. We'll validate post-selection.
+                filters = None
+            else:
+                # On Windows, use filters for better UX. On other platforms, allow all and validate later.
+                filters = [("Excel files", "*.xlsx"), ("All files", "*.*")]
+        elif filetype == "gguf":
+            if platform == "macosx":
+                # On macOS, don't filter to avoid lag/greyed-out files. We'll validate post-selection.
+                filters = None
+            else:
+                # On other platforms, filtering is fine.
+                filters = [("GGUF model files", "*.gguf"), ("All files", "*.*")]
+            title = "Select a .gguf model file"
         else:
             filters = [("All files", "*.*")]
             title = "Select File"
@@ -941,48 +1062,215 @@ class PacificaAgendaApp(App):
         # If native dialog is not supported/failed, it will be None.
         if selection is not None:
             if selection:  # If list is not empty (file was selected)
-                self._process_csv(selection[0])
+                path = selection[0]
+                if filetype == "xlsx":
+                    if not path.lower().endswith(".xlsx"):
+                        self._show_error("Invalid File Type", "Please select a Microsoft Excel .xlsx file.")
+                        return
+                    self._process_spreadsheet_file(path)
+                elif filetype == "gguf":
+                    self._handle_gguf_file(path)
             return  # Return here to prevent Kivy fallback
         
         # fallback to kivy file chooser
-        chooser = FileChooserListView(filters=["*.csv"] if filetype == "csv" else None, path=os.getcwd())
-        popup = Popup(title="Select CSV", content=chooser, size_hint=(0.9, 0.9))
+        if filetype == "xlsx":
+            # On macOS, allow all files and post-validate like native. Else, filter to .xlsx for convenience.
+            kivy_filters = None if platform == "macosx" else ["*.xlsx"]
+            popup_title = "Select Excel File"
+            callback = self._process_spreadsheet_file
+        elif filetype == "gguf":
+            kivy_filters = ["*.gguf"]
+            popup_title = "Select .gguf Model File"
+            callback = self._handle_gguf_file
+        else:
+            kivy_filters = None
+            popup_title = "Select File"
+            callback = lambda _: None # No-op for unknown types
+
+        chooser = FileChooserListView(filters=kivy_filters, path=os.getcwd())
+        popup = Popup(title=popup_title, content=chooser, size_hint=(0.9, 0.9))
 
         def _file_chosen(instance, selection, touch):
             if selection:
+                path = selection[0]
+                if filetype == "xlsx" and not path.lower().endswith(".xlsx"):
+                    # Keep popup open; inform user of invalid selection
+                    self._show_error("Invalid File Type", "Please select a Microsoft Excel .xlsx file.")
+                    return
                 popup.dismiss()
-                self._process_csv(selection[0])
+                callback(path)
 
         chooser.bind(on_submit=_file_chosen)
         popup.open()
 
     def _on_file_drop(self, _window, file_path_bytes):
         path = file_path_bytes.decode("utf-8")
-        if path.lower().endswith(".csv"):
-            self._process_csv(path)
+        current_screen = self.screen_manager.current
 
-    def _process_csv(self, filepath: str):
+        if path.lower().endswith(".xlsx") and current_screen == "home":
+            self._process_spreadsheet_file(path)
+        elif path.lower().endswith(".gguf") and current_screen == "model_install":
+            self._handle_gguf_file(path)
+
+    def _process_spreadsheet_file(self, filepath: str):
+        """Process an Excel file by first allowing user to select a sheet."""
         try:
-            self.csv_data, self.filtered_items = self.backend.process_csv(filepath, self.csv_headers)
+            # Get list of sheet names from the Excel file
+            excel_file = pd.ExcelFile(filepath)
+            sheet_names = excel_file.sheet_names
+            
+            if not sheet_names:
+                self._show_error("Excel Error", "The Excel file contains no sheets.")
+                return
+            
+            # If only one sheet, process it directly
+            if len(sheet_names) == 1:
+                self._load_and_process_sheet(filepath, sheet_names[0])
+            else:
+                # Show sheet selection popup
+                self._show_sheet_selection_popup(filepath, sheet_names)
+                
         except Exception as exc:
-            self._show_error("CSV Error", str(exc))
+            self._show_error("Excel Error", f"Failed to read Excel file: {str(exc)}")
             return
-        # go to review
-        self._populate_review_list()
-        self._navigate_to("review")
+
+    def _show_sheet_selection_popup(self, filepath: str, sheet_names: List[str]):
+        """Display a popup with a scrollable, clickable list of sheets. Selected row is blue-highlighted."""
+        scale = self.gui_scale_factor
+        
+        content = BoxLayout(orientation='vertical', spacing=10 * scale, padding=10 * scale)
+        
+        # Instructions
+        label = Label(
+            text="Please select the sheet containing your agenda data:",
+            size_hint_y=None,
+            height=40 * scale,
+            font_size=24 * scale,
+            color=[1, 1, 1, 1]
+        )
+        content.add_widget(label)
+
+        # Scrollable list of sheet names
+        from math import ceil
+        row_height = 60 * scale
+
+        scroll = ScrollView(size_hint_y=1, scroll_wheel_distance=15 * scale)
+        list_container = BoxLayout(orientation='vertical', spacing=6 * scale, size_hint_y=None)
+        list_container.bind(minimum_height=list_container.setter('height'))
+
+        # Add white background to list_container to fill empty space
+        with list_container.canvas.before:
+            Color(1, 1, 1, 1)
+            self.list_rect = Rectangle(pos=list_container.pos, size=list_container.size)
+        def update_rect(instance, value):
+            self.list_rect.pos = instance.pos
+            self.list_rect.size = instance.size
+        list_container.bind(pos=update_rect, size=update_rect)
+
+        scroll.add_widget(list_container)
+        content.add_widget(scroll)
+
+        # Track selection
+        selected_index = [0]  # mutable container for closure
+        buttons: List[Button] = []
+
+        # Helper to update visuals for selection
+        def update_visuals():
+            for i, btn in enumerate(buttons):
+                if i == selected_index[0]:
+                    btn.background_normal = ""
+                    btn.background_color = StyledButton.hex2rgba(PACIFICA_BLUE, 1.0)
+                    btn.color = [1, 1, 1, 1]
+                else:
+                    btn.background_normal = ""
+                    btn.background_color = [1, 1, 1, 1]
+                    btn.color = [0, 0, 0, 1]
+
+        # Create a button for each sheet
+        for idx, name in enumerate(sheet_names):
+            btn = Button(
+                text=name,
+                size_hint_y=None,
+                height=row_height,
+                font_size=26 * scale,
+                background_normal="",
+                background_color=[1, 1, 1, 1],
+                color=[0, 0, 0, 1],
+                halign="left",
+                valign="middle"
+            )
+            # Ensure text wraps/pads nicely
+            btn.text_size = (None, None)
+
+            def on_btn_release(instance, i=idx):
+                selected_index[0] = i
+                update_visuals()
+
+            btn.bind(on_release=on_btn_release)
+            buttons.append(btn)
+            list_container.add_widget(btn)
+
+        # Initialize visuals with first item selected
+        update_visuals()
+
+        # Buttons
+        btn_layout = BoxLayout(size_hint_y=None, height=75 * scale, spacing=10 * scale)
+        cancel_btn = StyledButton(text="Cancel")
+        select_btn = StyledButton(text="Select")
+        btn_layout.add_widget(cancel_btn)
+        btn_layout.add_widget(select_btn)
+        content.add_widget(btn_layout)
+        
+        popup = Popup(
+            title="Select Sheet",
+            content=content,
+            size_hint=(0.6, 0.6),
+            auto_dismiss=False
+        )
+        
+        def on_select(*_):
+            idx = selected_index[0] if 0 <= selected_index[0] < len(sheet_names) else 0
+            selected_sheet = sheet_names[idx]
+            popup.dismiss()
+            self._load_and_process_sheet(filepath, selected_sheet)
+        
+        def on_cancel(*_):
+            popup.dismiss()
+        
+        select_btn.bind(on_release=on_select)
+        cancel_btn.bind(on_release=on_cancel)
+        
+        popup.open()
+    
+    def _load_and_process_sheet(self, filepath: str, sheet_name: str):
+        """Load the selected sheet and process it through the backend."""
+        try:
+            # Read the specific sheet into a DataFrame
+            df = pd.read_excel(filepath, sheet_name=sheet_name)
+            
+            # Process through the backend
+            self.spreadsheet_data, self.filtered_items = self.backend.process_spreadsheet_data(df, self.spreadsheet_headers)
+            
+            # Navigate to review screen
+            self._populate_review_list()
+            self._navigate_to("review")
+            
+        except Exception as exc:
+            self._show_error("Processing Error", str(exc))
 
     # ---------------------------------------------------------------- Review screen
     def _build_review(self):
+        scale = self.gui_scale_factor
         scr = ReviewScreen(name="review")
-        layout = BoxLayout(orientation="vertical", padding=20, spacing=15)
+        layout = BoxLayout(orientation="vertical", padding=20 * scale, spacing=15 * scale)
         scr.add_widget(layout)
 
-        topbar = BoxLayout(orientation="horizontal", size_hint_y=None, height=75, spacing=10)
+        topbar = BoxLayout(orientation="horizontal", size_hint_y=None, height=75 * scale, spacing=10 * scale)
         back_btn = StyledButton(text="Back", size_hint=(None, None), width=180, height=75)
         back_btn.bind(on_release=lambda *_: self._navigate_to("home"))  # use navigation method
         topbar.add_widget(back_btn)
 
-        self.review_label = Label(text="Items Selected: 0", color=[0, 0, 0, 1], font_size=50)
+        self.review_label = Label(text="Items Selected: 0", color=[0, 0, 0, 1], font_size=50 * scale)
         topbar.add_widget(self.review_label)
 
         gen_btn = StyledButton(text="Generate", size_hint=(None, None), width=240, height=75)
@@ -996,9 +1284,9 @@ class PacificaAgendaApp(App):
         header_container = BoxLayout(
             orientation="horizontal",
             size_hint_y=None,
-            height=50,
-            padding=(20, 15), # Match AgendaItem's outer padding
-            spacing=15 # Match AgendaItem's outer spacing
+            height=50 * scale,
+            padding=(20 * scale, 15 * scale), # Match AgendaItem's outer padding
+            spacing=15 * scale # Match AgendaItem's outer spacing
         )
         with header_container.canvas.before:
             Color(*StyledButton.hex2rgba(PACIFICA_BLUE, 0.2)) # Light blue header background
@@ -1007,30 +1295,30 @@ class PacificaAgendaApp(App):
                               size=lambda inst, val: setattr(inst.canvas.before.children[-1], 'size', val))
 
         # Placeholder for checkbox column
-        header_container.add_widget(Widget(size_hint_x=None, width=40))
+        header_container.add_widget(Widget(size_hint_x=None, width=40 * scale))
 
         # Container for header labels to match AgendaItem's internal structure
         header_labels_container = BoxLayout(
             orientation="horizontal",
             size_hint_x=1,
-            spacing=COLUMN_SPACING,
-            padding=COLUMN_PAD # Match AgendaItem's internal column padding
+            spacing=15 * scale,
+            padding=10 * scale
         )
-        header_labels_container.add_widget(Label(text="Date", size_hint_x=COLUMN_SIZES["date"], halign="left", valign="middle", color=TEXT_COLOR, font_size=26, bold=True))
-        header_labels_container.add_widget(Label(text="Section", size_hint_x=COLUMN_SIZES["section"], halign="left", valign="middle", color=TEXT_COLOR, font_size=26, bold=True))
-        header_labels_container.add_widget(Label(text="Item", size_hint_x=COLUMN_SIZES["item"], halign="left", valign="middle", color=TEXT_COLOR, font_size=26, bold=True))
-        header_labels_container.add_widget(Label(text="Notes", size_hint_x=COLUMN_SIZES["notes"], halign="left", valign="middle", color=TEXT_COLOR, font_size=26, bold=True))
+        header_labels_container.add_widget(Label(text="Date", size_hint_x=COLUMN_SIZES["date"], halign="left", valign="middle", color=TEXT_COLOR, font_size=26 * scale, bold=True))
+        header_labels_container.add_widget(Label(text="Section", size_hint_x=COLUMN_SIZES["section"], halign="left", valign="middle", color=TEXT_COLOR, font_size=26 * scale, bold=True))
+        header_labels_container.add_widget(Label(text="Item", size_hint_x=COLUMN_SIZES["item"], halign="left", valign="middle", color=TEXT_COLOR, font_size=26 * scale, bold=True))
+        header_labels_container.add_widget(Label(text="Notes", size_hint_x=COLUMN_SIZES["notes"], halign="left", valign="middle", color=TEXT_COLOR, font_size=26 * scale, bold=True))
         
         layout.add_widget(header_container)
         header_container.add_widget(header_labels_container)
 
-        scroll = ScrollView(size_hint=(1, 1), scroll_distance=100, scroll_wheel_distance=150) # Increased scroll speed
+        scroll = ScrollView(size_hint=(1, 1), scroll_distance=100, scroll_wheel_distance=150 * scale) # Increased scroll speed
         self.items_container = BoxLayout(orientation='vertical', size_hint_y=None, spacing=2)
         self.items_container.bind(minimum_height=self.items_container.setter('height'))
         scroll.add_widget(self.items_container)
         layout.add_widget(scroll)
 
-        sel_bar = BoxLayout(size_hint_y=None, height=75, spacing=10)
+        sel_bar = BoxLayout(size_hint_y=None, height=75 * scale, spacing=10 * scale)
         sel_all = StyledButton(text="Select All", size_hint=(None, None), width=220, height=75)
         sel_all.bind(on_release=lambda *_: self._select_all_items(True))
         sel_bar.add_widget(sel_all)
@@ -1046,23 +1334,24 @@ class PacificaAgendaApp(App):
         self.items_container.clear_widgets()
 
         for idx, row in enumerate(self.filtered_items):
-            # only mark pre-selected if flagged Y
-            include_flag = str(row.get(self.csv_headers["include"], "")).upper() == "Y"
+            # pre-select if Include column is 'y' or 'yes' (case-insensitive)
+            include_val = str(row.get(self.spreadsheet_headers["include"], "")).strip().lower()
+            include_flag = include_val in ("y", "yes")
 
             # Extract individual column data
             # Get the ignore_brackets setting
             ignore_brackets = self.CONF.get("ignore_brackets", False)
 
-            date_text = str(row.get(self.csv_headers["date"], "")).strip()
-            section_text = str(row.get(self.csv_headers["section"], "")).replace("\n", " ").replace("•", "-").strip()
+            date_text = self.backend.get_display_date(row.get(self.spreadsheet_headers["date"], ""))
+            section_text = str(row.get(self.spreadsheet_headers["section"], "")).replace("\n", " ").replace("•", "-").strip()
             if section_text == "nan":
                 section_text = "placeholder" # Or suitable default/empty string
-            item_text = str(row.get(self.csv_headers["item"], "")).replace("\n", " ").replace("•", "-").strip()
+            item_text = str(row.get(self.spreadsheet_headers["item"], "")).replace("\n", " ").replace("•", "-").strip()
             if item_text == "nan":
                 item_text = "unnamed item" # Or suitable default/empty string
             notes_text = ""
-            if pd.notna(row.get(self.csv_headers["notes"])):
-                n = str(row[self.csv_headers["notes"]]).replace("\n", " ").replace("•", "-").strip()
+            if pd.notna(row.get(self.spreadsheet_headers["notes"])):
+                n = str(row[self.spreadsheet_headers["notes"]]).replace("\n", " ").replace("•", "-").strip()
                 if n and n.lower() != "nan":
                     notes_text = n
             
@@ -1112,26 +1401,33 @@ class PacificaAgendaApp(App):
 
     # ---------------------------------------------------------------- Generation screen
     def _build_generation(self):
+        scale = self.gui_scale_factor
         scr = GenerationScreen(name="generation")
-        layout = BoxLayout(orientation="vertical", padding=10, spacing=10)
+        layout = BoxLayout(orientation="vertical", padding=10 * scale, spacing=10 * scale)
         scr.add_widget(layout)
 
-        top = BoxLayout(orientation="horizontal", size_hint_y=None, height=75, spacing=10)
+        top = BoxLayout(orientation="horizontal", size_hint_y=None, height=75 * scale, spacing=10 * scale)
         self.back_gen_btn = StyledButton(text="Back", size_hint=(None, None), width=180, height=75)
         self.back_gen_btn.bind(on_release=lambda *_: self._cancel_generation())
         top.add_widget(self.back_gen_btn)
 
-        save_btn = StyledButton(text="Save", size_hint=(None, None), width=220, height=75)
+        save_btn = StyledButton(text="Save DOCX", size_hint=(None, None), width=220, height=75)
         save_btn.disabled = True
         self.save_button = save_btn
         save_btn.bind(on_release=lambda *_: self._save_report())
         top.add_widget(save_btn)
 
+        copy_btn = StyledButton(text="Copy Text", size_hint=(None, None), width=220, height=75)
+        copy_btn.disabled = True
+        self.copy_button = copy_btn # Store reference
+        copy_btn.bind(on_release=lambda *_: self._copy_report_to_clipboard())
+        top.add_widget(copy_btn)
+
         layout.add_widget(top)
 
         # A container for all generation-related outputs that will take up the remaining space
         # Make this an instance variable
-        self.generation_area = BoxLayout(orientation='vertical', spacing=10)
+        self.generation_area = BoxLayout(orientation='vertical', spacing=10 * scale)
         layout.add_widget(self.generation_area)
 
         # --- Main Generation Output Area ---
@@ -1140,14 +1436,14 @@ class PacificaAgendaApp(App):
 
         self.gen_output = TextInput(
             readonly=True,
-            font_size=28,
+            font_size=28 * scale,
             foreground_color=[0, 0, 0, 1],
             background_color=[1, 1, 1, 1],
             size_hint_y=None,
         )
         self.gen_output.bind(minimum_height=self.gen_output.setter('height'))
 
-        self.sv_gen_output = ScrollView(scroll_wheel_distance=50)
+        self.sv_gen_output = ScrollView(scroll_wheel_distance=50 * scale)
         self.sv_gen_output.add_widget(self.gen_output)
         self.sv_gen_output.bind(on_scroll_stop=self._on_scroll_stop)
         self.gen_output_container.add_widget(self.sv_gen_output)
@@ -1158,15 +1454,15 @@ class PacificaAgendaApp(App):
         self.gen_output_container.size_hint_y = 1.0
         self.generation_area.add_widget(self.gen_output_container)
 
-        self.debug_container = BoxLayout(orientation='vertical', size_hint_y=0.5, spacing=5)
+        self.debug_container = BoxLayout(orientation='vertical', size_hint_y=0.5, spacing=5 * scale)
         
         debug_title = Label(
             text="[b]Debug Console[/b]",
             markup=True,
             size_hint_y=None,
-            height=30,
+            height=30 * scale,
             color=TEXT_COLOR,
-            font_size=20
+            font_size=20 * scale
         )
         self.debug_container.add_widget(debug_title)
 
@@ -1175,11 +1471,11 @@ class PacificaAgendaApp(App):
             size_hint_y=None,
             background_color=[0.1, 0.1, 0.1, 1],
             foreground_color=[0.8, 1.0, 0.8, 1],
-            font_size=14
+            font_size=14 * scale
         )
         self.debug_console.bind(minimum_height=self.debug_console.setter('height'))
 
-        self.sv_debug = ScrollView(scroll_wheel_distance=50)
+        self.sv_debug = ScrollView(scroll_wheel_distance=50 * scale)
         self.sv_debug.add_widget(self.debug_console)
         self.sv_debug.bind(on_scroll_stop=self._on_scroll_stop)
         self.debug_container.add_widget(self.sv_debug)
@@ -1220,21 +1516,22 @@ class PacificaAgendaApp(App):
 
     # ---------------------------------------------------------------- Settings
     def _build_settings(self):
+        scale = self.gui_scale_factor
         scr = SettingsScreen(name="settings")
-        root = BoxLayout(orientation="vertical", padding=20, spacing=20)
+        root = BoxLayout(orientation="vertical", padding=20 * scale, spacing=20 * scale)
         scr.add_widget(root)
 
-        title = Label(text="[b]Settings[/b]", markup=True, font_size=48, size_hint_y=None, height=80, color=[0, 0, 0, 1])  # increased font size and height
+        title = Label(text="[b]Settings[/b]", markup=True, font_size=48 * scale, size_hint_y=None, height=80 * scale, color=[0, 0, 0, 1])
         root.add_widget(title)
 
-        grid = GridLayout(cols=2, rows=5, row_force_default=True, row_default_height=75, spacing=(10,10), size_hint_y=None)
+        grid = GridLayout(cols=2, rows=6, row_force_default=True, row_default_height=75 * scale, spacing=(10 * scale,10 * scale), size_hint_y=None)
         grid.bind(minimum_height=grid.setter('height'))
 
         # Model row
         label_model = Label(
             text="Model",
             color=[0, 0, 0, 1],
-            font_size=28,
+            font_size=28 * scale,
             bold=True,
             halign='left',
             valign='middle',
@@ -1245,17 +1542,17 @@ class PacificaAgendaApp(App):
             text="Checking...",
             color=[0, 0, 0, 1],
             halign='left',
-            font_size=28
+            font_size=28 * scale
         )
         self.model_status_lbl.bind(size=lambda inst, *_: inst.setter('text_size')(inst, (inst.width, None)))
         self.install_model_btn = StyledButton(
-            text="Install",
+            text="Model Settings",
             size_hint=(None, None),
-            width=180,
+            width=280,   # was 180
             height=75
         )
-        self.install_model_btn.bind(on_release=lambda *_: self._install_model())
-        control_model = BoxLayout(orientation="horizontal", spacing=10, size_hint_x=0.7)
+        self.install_model_btn.bind(on_release=lambda *_: self._open_model_install_menu())
+        control_model = BoxLayout(orientation="horizontal", spacing=10 * scale, size_hint_x=0.7)
         control_model.add_widget(self.model_status_lbl)
         control_model.add_widget(self.install_model_btn)
         grid.add_widget(label_model)
@@ -1265,7 +1562,7 @@ class PacificaAgendaApp(App):
         label_prompts = Label(
             text="Prompt Templates",
             color=[0, 0, 0, 1],
-            font_size=28,
+            font_size=28 * scale,
             bold=True,
             halign='left',
             valign='middle',
@@ -1276,17 +1573,17 @@ class PacificaAgendaApp(App):
         edit_p1_btn.bind(on_release=lambda *_: self._open_prompt_editor("pass1"))
         edit_p2_btn = StyledButton(text="Edit Pass 2 Prompt", size_hint_x=None, width=300)
         edit_p2_btn.bind(on_release=lambda *_: self._open_prompt_editor("pass2"))
-        control_prompts = BoxLayout(orientation="horizontal", spacing=10, size_hint_x=0.7)
+        control_prompts = BoxLayout(orientation="horizontal", spacing=10 * scale, size_hint_x=0.7)
         control_prompts.add_widget(edit_p1_btn)
         control_prompts.add_widget(edit_p2_btn)
         grid.add_widget(label_prompts)
         grid.add_widget(control_prompts)
 
-        # CSV Headers row
+        # Spreadsheet Headers row
         label_headers = Label(
-            text="CSV Column Required Header Names",
+            text="Spreadsheet Column Required Header Names",
             color=[0, 0, 0, 1],
-            font_size=28,
+            font_size=28 * scale,
             bold=True,
             halign='left',
             valign='middle',
@@ -1294,7 +1591,7 @@ class PacificaAgendaApp(App):
         )
         label_headers.bind(size=lambda inst, *_: inst.setter('text_size')(inst, (inst.width, None)))
         
-        control_headers = BoxLayout(orientation="horizontal", spacing=5, size_hint_x=0.7)
+        control_headers = BoxLayout(orientation="horizontal", spacing=5 * scale, size_hint_x=0.7)
         
         # Create buttons for each header. Use smaller font size to fit and set fixed width.
         btn_h_date = StyledButton(text="Date", font_size=22, size_hint_x=None, width=150, on_release=lambda *_: self._open_header_editor("date", "Meeting Date Header"))
@@ -1317,7 +1614,7 @@ class PacificaAgendaApp(App):
         label_debug = Label(
             text="Debug Mode",
             color=[0, 0, 0, 1],
-            font_size=28,
+            font_size=28 * scale,
             bold=True,
             halign='left',
             valign='middle',
@@ -1331,7 +1628,7 @@ class PacificaAgendaApp(App):
             width=320, # Wider to fit "Debug Mode Disabled"
             height=75
         )
-        control_debug = BoxLayout(orientation="horizontal", spacing=10, size_hint_x=0.7)
+        control_debug = BoxLayout(orientation="horizontal", spacing=10 * scale, size_hint_x=0.7)
         control_debug.add_widget(debug_toggle_btn)
         control_debug.add_widget(Widget()) # Add a spacer to push button to left if control_debug takes more space
         grid.add_widget(label_debug)
@@ -1341,7 +1638,7 @@ class PacificaAgendaApp(App):
         label_brackets = Label(
             text="Ignore Bracketed Text []",
             color=[0, 0, 0, 1],
-            font_size=28,
+            font_size=28 * scale,
             bold=True,
             halign='left',
             valign='middle',
@@ -1357,18 +1654,72 @@ class PacificaAgendaApp(App):
             text_on="Ignoring Brackets",
             text_off="Not Ignoring Brackets"
         )
-        control_brackets = BoxLayout(orientation="horizontal", spacing=10, size_hint_x=0.7)
+        control_brackets = BoxLayout(orientation="horizontal", spacing=10 * scale, size_hint_x=0.7)
         control_brackets.add_widget(brackets_toggle_btn)
         control_brackets.add_widget(Widget())
         grid.add_widget(label_brackets)
         grid.add_widget(control_brackets)
+        
+        # GUI Scale row
+        label_scale = Label(
+            text="GUI Scale Factor",
+            color=[0, 0, 0, 1],
+            font_size=28 * scale,
+            bold=True,
+            halign='left',
+            valign='middle',
+            size_hint_x=0.3
+        )
+        label_scale.bind(size=lambda inst, *_: inst.setter('text_size')(inst, (inst.width, None)))
+        
+        self.scale_input = TextInput(
+            text=str(self.gui_scale_factor),
+            size_hint=(None, None),
+            width=100 * scale,
+            height=50 * scale,
+            font_size=24 * scale,
+            multiline=False
+        )
+
+        # Create a wrapper layout to center the TextInput
+        scale_input_wrapper = RelativeLayout(
+            size_hint=(None, 1), # Take full height of the row, use fixed width
+            width=self.scale_input.width
+        )
+        self.scale_input.pos_hint = {'center_y': 0.5}
+        scale_input_wrapper.add_widget(self.scale_input)
+        
+        set_scale_btn = StyledButton(
+            text="Set Scale",
+            size_hint=(None, None),
+            width=180,
+            height=75
+        )
+        set_scale_btn.bind(on_release=lambda *_: self._set_gui_scale())
+
+        reset_scale_btn = StyledButton(
+            text="Reset",
+            size_hint=(None, None),
+            width=180,
+            height=75
+        )
+        reset_scale_btn.bind(on_release=lambda *_: self._set_gui_scale(reset=True))
+
+        control_scale = BoxLayout(orientation="horizontal", spacing=10 * scale, size_hint_x=0.7)
+        control_scale.add_widget(scale_input_wrapper)
+        control_scale.add_widget(set_scale_btn)
+        control_scale.add_widget(reset_scale_btn)
+        control_scale.add_widget(Widget())
+
+        grid.add_widget(label_scale)
+        grid.add_widget(control_scale)
 
         root.add_widget(grid)
     
         # NEW: Add a flexible spacer to push content to the top and leave space at the bottom
         root.add_widget(Widget())
     
-        btn_bar = BoxLayout(size_hint_y=None, height=75, spacing=10)
+        btn_bar = BoxLayout(size_hint_y=None, height=75 * scale, spacing=10 * scale)
         back_btn = StyledButton(text="Back", size_hint=(None, None), width=180, height=75)
         back_btn.bind(on_release=lambda *_: self._navigate_to("home"))
 
@@ -1388,21 +1739,184 @@ class PacificaAgendaApp(App):
         root.add_widget(btn_bar)
         self.screen_manager.add_widget(scr)
 
-    # pickers
+    def _set_gui_scale(self, reset=False):
+        if reset:
+            new_scale = 1.0
+        else:
+            try:
+                new_scale = float(self.scale_input.text)
+                if new_scale <= 0:
+                    raise ValueError("Scale must be positive")
+                if new_scale > 3.0:
+                    self._show_error("Invalid Scale", "GUI scale factor cannot exceed 3.0.")
+                    return
+            except (ValueError, TypeError):
+                self._show_error("Invalid Scale", "Please enter a valid positive number for the scale factor (e.g., 1.0 or 1.2).")
+                return
+
+        self.gui_scale_factor = new_scale
+        self._save_conf()
+        self._rebuild_ui()
+
+    def _rebuild_ui(self):
+        """
+        Clears and rebuilds the entire UI to apply scaling changes.
+        Preserves essential state like loaded spreadsheet data.
+        """
+        # Store current screen to return to it after rebuild
+        current_screen = self.screen_manager.current
+        
+        # Clear all widgets from all screens, and the screen manager itself
+        for screen in self.screen_manager.screens:
+            screen.clear_widgets()
+        self.screen_manager.clear_widgets()
+
+        # Re-build all screens with the new scale factor
+        self._build_home()
+        self._build_review()
+        self._build_generation()
+        self._build_settings()
+        self._build_help()
+        self._build_credits()
+        self._build_model_install() # Ensure ModelInstallScreen is rebuilt
+        
+        # Restore necessary state
+        self._update_model_status()
+        self._update_debug_console_visibility(self.CONF["debug"])
+        self._update_home_screen_ui()
+        if self.filtered_items:
+             self._populate_review_list()
+        
+        # Return to the screen the user was on
+        self.screen_manager.current = "home" # Go home first to avoid visual glitches
+        self.screen_manager.current = current_screen
+        self._show_info("GUI Scale Updated", "UI has been rescaled.")
+
+    # ---------------------------  Model Management ---------------------------
+    def _initialize_model_loading(self):
+        """Attempt to load the model noted in config (current_model)."""
+        model_filename = self.CONF.get("current_model", "")
+        if model_filename:
+            try:
+                self.backend.load_model_by_filename(model_filename)
+            except Exception as e:
+                print(f"[frontend] Could not load model '{model_filename}': {e}")
+                self.CONF["current_model"] = ""
+                self._save_conf()
+        # Update labels etc.
+        self._update_model_status()
+        # Populate spinner after backend lists are ready
+        from kivy.clock import Clock
+        Clock.schedule_once(lambda dt: self._refresh_models_dropdown(), 0.1)
+
+    def _refresh_models_dropdown(self):
+        """Refresh spinner values with the latest available models."""
+        if not hasattr(self, "model_spinner"):
+            return
+        self.model_spinner.values = self.backend.get_available_models()
+
+        # Ensure current value is still valid
+        current = self.CONF.get("current_model", "")
+        if current and current in self.model_spinner.values:
+            self.model_spinner.text = current
+        else:
+            self.model_spinner.text = "Select Model"
+
+        # Manually update visuals to ensure the color is always correct,
+        # especially on initial load.
+        self._update_spinner_visuals(self.model_spinner, self.model_spinner.text)
+
+    def _on_spinner_click(self, spinner):
+        """Called when the spinner button is clicked, before the dropdown opens."""
+        # If the dropdown is about to open but has no items, show an info message.
+        if not spinner.values:
+            self._show_info("No Models Installed",
+                            "Please install a model first.\n\n"
+                            "You can download the recommended model using the button below, "
+                            "or drag and drop a .gguf file into the upload area.")
+
+    def _update_spinner_visuals(self, spinner, text):
+        """Sets the spinner's visual state based on the selected text."""
+        if text == "Select Model":
+            # Highlight with green if no model is selected
+            spinner.background_normal = ''
+            spinner.background_down = ''
+            spinner.background_color = StyledButton.hex2rgba("#5CB85C", 1.0)
+        else:
+            # A model is selected, so revert to default spinner appearance
+            spinner.background_normal = 'atlas://data/images/defaulttheme/spinner'
+            spinner.background_down = 'atlas://data/images/defaulttheme/spinner_pressed'
+            spinner.background_color = (1, 1, 1, 1) # Reset tint
+
+    def _on_model_selected(self, spinner, text):
+        """User picked a model from the dropdown. This triggers a model load."""
+        self._update_spinner_visuals(spinner, text)
+
+        if text == "Select Model":
+            return
+
+        # This part is the action that should only happen on user selection.
+        try:
+            self.backend.load_model_by_filename(text)
+            self.CONF["current_model"] = text
+            self._save_conf()
+            self._show_info(f"Model '{text}' selected and loading in background.")
+            self._update_model_status()
+        except Exception as e:
+            self._show_error("Model Load Error", str(e))
+            # On error, refresh dropdown to revert selection and color.
+            self._refresh_models_dropdown()
+
+    def _confirm_delete_model(self):
+        """Ask user confirmation before deleting the selected model."""
+        fname = self.CONF.get("current_model", "")
+        if not fname:
+            self._show_error("No Model Selected", "Please select a model to delete first.")
+            return
+
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        label = Label(text=f"Delete model '{fname}'?\nThis cannot be undone.", halign='center')
+        btns = BoxLayout(size_hint_y=None, height=75, spacing=10)
+        cancel = StyledButton(text="Cancel")
+        ok = StyledButton(text="Delete", bg_color_name_override="#D9534F")
+        btns.add_widget(cancel); btns.add_widget(ok)
+        content.add_widget(label); content.add_widget(btns)
+        popup = Popup(title="Confirm Delete", content=content, size_hint=(0.7,0.4), auto_dismiss=False)
+        cancel.bind(on_release=lambda *_: popup.dismiss())
+        ok.bind(on_release=lambda *_: (popup.dismiss(), self._delete_model_file(fname)))
+        popup.open()
+
+    def _delete_model_file(self, fname: str):
+        """Physically delete model file and refresh UI."""
+        try:
+            path = os.path.join(self.backend._get_models_dir(), fname)
+            if os.path.exists(path):
+                os.remove(path)
+            # If deleted model was current, clear selection
+            if self.CONF.get("current_model") == fname:
+                self.CONF["current_model"] = ""
+                self.backend.llm_model = None
+            self._save_conf()
+            self._refresh_models_dropdown()
+            self._update_model_status()
+            self._show_info(f"Model '{fname}' deleted.")
+        except Exception as e:
+            self._show_error("Delete Error", str(e))
+
     @mainthread
     def _update_model_status(self):
-        model_path = self.CONF.get("model_path")
-        if model_path and os.path.exists(model_path):
-            self.model_status_lbl.text = f"Installed at {model_path}"
-            self.install_model_btn.text = "Ready" # Change text to "Ready"
-            self.install_model_btn.disabled = True
-            # Also update backend instance if needed
-            if not self.backend.llm_model and self.backend.model_path:
-                self.backend._load_llm_model_async()
+        current = self.CONF.get("current_model", "")
+        available = self.backend.get_available_models()
+        if current and current in available:
+            self.model_status_lbl.text = f"Current Model: {current}"
         else:
-            self.model_status_lbl.text = f"Not Installed ({MODEL_FILENAME})"
-            self.install_model_btn.text = "Install" # Ensure text is "Install" if not installed
-            self.install_model_btn.disabled = False
+            if available:
+                self.model_status_lbl.text = "No model selected"
+            else:
+                self.model_status_lbl.text = "No models found – please install one"
+        # Button stays enabled & labelled as 'Model Settings'
+        self.install_model_btn.text = "Model Settings"
+        self.install_model_btn.disabled = False
         self._update_home_screen_ui()
 
     def _install_model(self):
@@ -1431,8 +1945,7 @@ class PacificaAgendaApp(App):
         def on_confirm(*_):
             popup.dismiss()
             self.model_status_lbl.text = "Downloading... (may take a while)"
-            self.install_model_btn.disabled = True
-
+            # Button stays enabled for settings
             # Start download in a thread
             threading.Thread(
                 target=self.backend.download_model,
@@ -1450,15 +1963,19 @@ class PacificaAgendaApp(App):
 
     @mainthread
     def _on_model_download_complete(self, model_path: str):
-        self._show_info("Model downloaded successfully!")
-        self.CONF["model_path"] = model_path
+        """
+        Called by backend.download_model() once the model has downloaded **and** loaded.
+        model_path is the absolute path; convert to filename & update state.
+        """
+        fname = os.path.basename(model_path)
+        self.CONF["current_model"] = fname
         self._save_conf()
 
-        # The backend's download_model method already loads the model instance.
-        # We just need to update the path attribute in the backend for future runs.
-        self.backend.model_path = model_path
-        # The model is already loaded in backend.llm_model, so we just update UI.
+        # Refresh dropdown / labels
+        self._refresh_models_dropdown()
         self._update_model_status()
+        self._show_info("Model downloaded and loading in background.")
+        self._navigate_to("settings")
 
     @mainthread
     def _on_model_download_error(self, exc: Exception):
@@ -1494,7 +2011,7 @@ class PacificaAgendaApp(App):
         content.add_widget(title_label)
         
         info_label = Label(
-            text="Type the exact column header name from your CSV file. This is case-sensitive.",
+            text="Type the exact column header name from your spreadsheet. This is case-sensitive.",
             size_hint_y=None,
             height=50,
             font_size=20,
@@ -1504,7 +2021,7 @@ class PacificaAgendaApp(App):
         content.add_widget(info_label)
 
         text_input = TextInput(
-            text=self.csv_headers.get(header_key, ""),
+            text=self.spreadsheet_headers.get(header_key, ""),
             font_size=24,
             multiline=False,
             size_hint_y=None,
@@ -1530,14 +2047,14 @@ class PacificaAgendaApp(App):
             if not new_header:
                 self._show_error("Invalid Header", "Header name cannot be empty.")
                 return
-            self.csv_headers[header_key] = new_header
-            self.CONF["csv_headers"] = self.csv_headers
+            self.spreadsheet_headers[header_key] = new_header
+            self.CONF["spreadsheet_headers"] = self.spreadsheet_headers
             self._save_conf()
             self._show_info(f"'{title_text}' header saved.")
             popup.dismiss()
 
         def on_reset(*_):
-            text_input.text = DEFAULT_CSV_HEADERS[header_key]
+            text_input.text = DEFAULT_SPREADSHEET_HEADERS[header_key]
 
         def on_cancel(*_):
             popup.dismiss()
@@ -1651,17 +2168,27 @@ class PacificaAgendaApp(App):
             if os.path.exists(data_dir):
                 shutil.rmtree(data_dir)
 
-            # Reset model path in config
-            self.CONF["model_path"] = ""
+            # Reset model keys in config
+            self.CONF.pop("current_model", None)
+            self.CONF.pop("model_path", None)  # legacy
             self._save_conf()
             self._update_model_status()
 
             # Show a final message before quitting
-            final_msg_content = Label(
-                text="Application data has been removed.\n"
-                     "Please drag the application to the Trash to complete uninstallation.",
-                halign='center'
-            )
+            if platform == 'win':
+                msg = ("Application data has been removed.\n"
+                       "Please delete the application executable (.exe) "
+                       "to complete uninstallation.")
+            elif platform == 'macosx':
+                msg = ("Application data has been removed.\n"
+                       "Please drag the application to the Trash "
+                       "to complete uninstallation.")
+            else: # Linux, etc.
+                msg = ("Application data has been removed.\n"
+                       "Please delete the application file "
+                       "to complete uninstallation.")
+
+            final_msg_content = Label(text=msg, halign='center')
             popup = Popup(title="Uninstall Complete", content=final_msg_content, size_hint=(0.6, 0.4))
 
             # Use a clock schedule to close the app after the popup is shown
@@ -1676,32 +2203,33 @@ class PacificaAgendaApp(App):
             self._show_error("Uninstall Error", f"Could not remove application data: {e}")
 
     def _update_home_screen_ui(self):
-        model_path = self.CONF.get("model_path")
-        is_installed = model_path and os.path.exists(model_path)
+        current = self.CONF.get("current_model", "")
+        is_installed = current and (current in self.backend.get_available_models())
         self.upload_zone.set_uninstalled_state(not is_installed)
 
     # ---------------------------------------------------------------- Help & Credits
     def _build_help(self):
+        scale = self.gui_scale_factor
         scr = HelpScreen(name="help")
         # When this screen is about to be shown, update the help text
         scr.bind(on_pre_enter=self._update_help_text)
-        root = BoxLayout(orientation="vertical", padding=20, spacing=20)
+        root = BoxLayout(orientation="vertical", padding=20 * scale, spacing=20 * scale)
         scr.add_widget(root)
         
         # title with back button
-        header = BoxLayout(orientation="horizontal", size_hint_y=None, height=85, spacing=10)
+        header = BoxLayout(orientation="horizontal", size_hint_y=None, height=85 * scale, spacing=10 * scale)
         back_btn = StyledButton(text="Back", size_hint=(None, None), width=180, height=75)
         back_btn.bind(on_release=lambda *_: self._navigate_to("home"))
         header.add_widget(back_btn)
         
-        title = Label(text="[b]Help & Instructions[/b]", markup=True, font_size=50, color=[0, 0, 0, 1])
+        title = Label(text="[b]Help & Instructions[/b]", markup=True, font_size=50 * scale, color=[0, 0, 0, 1])
         header.add_widget(title)
-        header.add_widget(Widget(size_hint=(None, None), width=150))  # spacer to balance title
+        header.add_widget(Widget(size_hint=(None, None), width=150 * scale))  # spacer to balance title
         root.add_widget(header)
         
         # scrollable content
         scroll = ScrollView()
-        content = BoxLayout(orientation="vertical", spacing=15, size_hint_y=None, padding=20)
+        content = BoxLayout(orientation="vertical", spacing=15 * scale, size_hint_y=None, padding=20 * scale)
         content.bind(minimum_height=content.setter('height'))
         
         # Create the label but don't set its text yet. _update_help_text will do it.
@@ -1725,67 +2253,87 @@ class PacificaAgendaApp(App):
 
     def _update_help_text(self, *args):
         # This method is called right before the help screen is displayed.
-        # It builds the help text with the current CSV header configuration.
+        # It builds the help text with the current spreadsheet header configuration.
         help_text = (
-            "[size=42][b]Welcome to the Agenda Summary Generator v3.0![/b][/size]\n\n"
+            "[size=42][b]Welcome to the Agenda Summary Generator v4.0![/b][/size]\n\n"
             "This guide will walk you through using the application, from initial setup to generating your first report.\n\n"
             
-            "[size=34][b]Part 1: First-Time Setup[/b][/size]\n\n"
-            "[size=30][b]Step 1: Install the AI Model[/b][/size]\n"
-            "The first time you run the app, you need to install the local AI model. This is a one-time download (~4GB).\n"
-            "1. On the home screen, click '[b]Settings[/b]'.\n"
-            "2. In the Settings menu, find the 'Model' section and click the '[b]Install[/b]' button.\n"
-            "3. Confirm the download. The app will download the model to a local folder. This may take a few minutes.\n"
-            "4. Once complete, the status will show 'Ready', and you can return to the home screen.\n\n"
+            "[size=34][b]Part 1: First-Time Setup & Model Management[/b][/size]\n\n"
+            "[size=30][b]Step 1: Install an AI Model[/b][/size]\n"
+            "Before you can generate reports, you need at least one AI model installed. To begin, navigate to [b]Settings[/b] and click the '[b]Model Settings[/b]' button. This will take you to the 'Install Models' screen.\n\n"
+            "You have two ways to add a model:\n\n"
+            "1. [b]Install the Recommended Model (Requires Internet)[/b]\n"
+            "   • This is the easiest way to get started.\n"
+            "   • Click the large button at the bottom: '[b]Download Qwen3-4B-Q6_K.gguf from Online[/b]'.\n"
+            "   • The application will download the recommended model (approx. 4 GB) and install it for you. This may take a few minutes.\n\n"
+            "2. [b]Install a Custom Model from a File (Offline)[/b]\n"
+            "   • This option is for installing any GGUF-format model you have saved on your computer.\n"
+            "   • In the large upload area, either [b]click to browse[/b] for a `.gguf` file or [b]drag and drop[/b] the file directly onto the zone.\n"
+            "   • The model file will be copied into the application's data folder and become available for use.\n\n"
+
+            "[size=30][b]Step 2: Selecting and Managing Models[/b][/size]\n"
+            "• Once installed, your models will appear in the '[b]Available Models[/b]' dropdown list on the 'Install Models' screen.\n"
+            "• To use a model for generation, simply [b]select it from the dropdown[/b]. The chosen model will be loaded in the background.\n"
+            "• You can install as many models as you like and switch between them at any time.\n"
+            "• Use the '[b]Refresh[/b]' button to update the list if you've manually added files, and the '[b]Delete Model[/b]' button to remove the currently selected model from your system.\n\n"
 
             "[size=34][b]Part 2: Generating a Report[/b][/size]\n\n"
-            "[size=30][b]Step 2: Prepare Your CSV File[/b][/size]\n"
-            "• Your data must be in a Comma-Separated Value (.csv) file.\n"
-            "• The app needs specific column headers to find the data. By default, it looks for:\n"
-            f"    - \"[b]{self.csv_headers['date']}[/b]\" for the Meeting Date\n"
-            f"    - \"[b]{self.csv_headers['section']}[/b]\" for the Agenda Section\n"
-            f"    - \"[b]{self.csv_headers['item']}[/b]\" for the Agenda Item Title\n"
-            f"    - \"[b]{self.csv_headers['notes']}[/b]\" for any additional notes\n"
-            f"    - \"[b]{self.csv_headers['include']}[/b]\" to automatically select an item (the cell value must be '[b]Y[/b]')\n"
-            "• [b]IMPORTANT[/b]: For the app to correctly identify which rows are agenda items, the value in your 'date' column must start with a number (e.g., '01-Jan-2024' or '1/1/24').\n\n"
+            "[size=30][b]Step 3: Prepare Your Excel File[/b][/size]\n"
+            "• Your data must be in a Microsoft Excel (.xlsx) file.\n"
+            "• If your file has multiple sheets, the app will prompt you to select which one contains your agenda data.\n"
+            "• The selected sheet needs specific column headers to find the data. By default, it looks for:\n"
+            f"    - \"[b]{self.spreadsheet_headers['date']}[/b]\" for the Meeting Date\n"
+            f"    - \"[b]{self.spreadsheet_headers['section']}[/b]\" for the Agenda Section\n"
+            f"    - \"[b]{self.spreadsheet_headers['item']}[/b]\" for the Agenda Item Title\n"
+            f"    - \"[b]{self.spreadsheet_headers['notes']}[/b]\" for any additional notes\n"
+            f"    - \"[b]{self.spreadsheet_headers['include']}[/b]\" to automatically select an item (cell value '[b]Y[/b]' or '[b]Yes[/b]' — case-insensitive)\n"
+            "• [b]IMPORTANT[/b]: For the app to correctly identify which rows are agenda items, the value in your 'date' column must start with a number in specifically [date]-[3-letter-month] format (e.g., '01-Jan' or '31-Dec').\n\n"
 
-            "[size=30][b]Step 3: Upload Your File[/b][/size]\n"
-            "• On the home screen, either [b]drag and drop[/b] your .csv file onto the large upload area, or [b]click the area[/b] to open a file browser.\n\n"
+            "[size=30][b]Step 4: Upload Your File[/b][/size]\n"
+            "• On the home screen, either [b]drag and drop[/b] your .xlsx file onto the large upload area, or [b]click the area[/b] to open a file browser.\n"
+            "• If your Excel file contains multiple sheets, a popup will appear asking you to select which sheet to process.\n\n"
 
-            "[size=30][b]Step 4: Review and Select Items[/b][/size]\n"
+            "[size=30][b]Step 5: Review and Select Items[/b][/size]\n"
             "• After uploading, you'll see a list of all agenda items found in your file.\n"
-            "• Items are automatically checked if their '[b]Include[/b]' column was 'Y'.\n"
+            "• Items are automatically checked if their '[b]Include[/b]' column is 'Y' or 'Yes' (case-insensitive).\n"
             "• You can manually check or uncheck any item by clicking on it.\n"
-            "• Use the '[b]Select All[/b]' and '[b]Deselect All[/b]' buttons for quick changes.\n\n"
+            "• Use the '[b]Select All[/b]' and '[b]Deselect All[/b]' buttons for quick changes.\n"
+            "• Toggle '[b]Ignore Bracketed Text[/b]' in settings to filter out text in brackets.\n\n"
             
-            "[size=30][b]Step 5: Generate the Summary[/b][/size]\n"
+            "[size=30][b]Step 6: Generate the Summary[/b][/size]\n"
             "• Once you're happy with your selections, click the '[b]Generate[/b]' button.\n"
             "• You will be taken to a new screen where you can see the AI generating the report in real-time.\n"
+            "• Time to generate is determined by which model you select and your computer hardware.\n"
+            "• Processing may take a long time on slower computers!\n"
             "• The output window and debug console (if enabled) will scroll automatically.\n\n"
 
-            "[size=30][b]Step 6: Save Your Report[/b][/size]\n"
-            "• When the process is finished, the '[b]Save[/b]' button will become active.\n"
+            "[size=30][b]Step 7: Save or Copy Your Report[/b][/size]\n"
+            "• When the process is finished, the '[b]Save[/b]' and '[b]Copy[/b]' buttons will become active.\n"
             "• A notification sound will play, and the app window will come to the front.\n"
-            "• Click '[b]Save[/b]', choose a location, and the report will be saved as a formatted Microsoft Word (.docx) file.\n\n"
+            "• Click '[b]Save[/b]' to save the report as a formatted Microsoft Word (.docx) file. Alternatively, click '[b]Copy[/b]' to copy the entire report text to your clipboard for pasting elsewhere.\n"
+            "• After saving, a confirmation dialog will appear with two buttons: '[b]OK[/b]' (left) and '[b]Open File Location[/b]' (right) to quickly reveal the saved file in your file manager.\n\n"
 
             "[size=34][b]Part 3: Advanced Settings[/b][/size]\n\n"
             "The Settings screen provides powerful customization options:\n"
-            "• [b]CSV Column Headers[/b]: If your CSV file uses different header names (e.g., 'Meeting_Date' instead of 'MEETING DATE'), you can change what the app looks for here. Click each button ('Date', 'Section', etc.) to edit the corresponding header name.\n"
+            "• [b]Model Settings[/b]: This button takes you to the model installation and management screen, as described in Part 1.\n"
+            "• [b]Spreadsheet Column Headers[/b]: If your Excel file uses different header names (e.g., 'Meeting_Date' instead of 'MEETING DATE'), you can change what the app looks for here. Click each button ('Date', 'Section', etc.) to edit the corresponding header name.\n"
             "• [b]Prompt Templates[/b]: Advanced users can edit the instructions (prompts) given to the AI. This allows for fine-tuning the summarization and formatting style.\n"
-            "• [b]Debug Mode[/b]: Toggling this on will show a detailed debug console on the generation screen, which is useful for troubleshooting.\n"
-            "• [b]Ignore Bracketed Text[/b]: When enabled, the app will automatically remove any text found inside square brackets `[]` from your CSV data before sending it to the AI.\n"
+            "• [b]Debug Mode[/b]: Toggling this on will show a detailed debug console on the generation screen, which is useful for troubleshooting. It displays the exact text sent to the AI and performance metrics like generation speed. For developers.\n"
+            "• [b]Ignore Bracketed Text[/b]: When enabled, the app will automatically remove any text found inside square brackets `[]` from your spreadsheet data before sending it to the AI.\n"
+            "• [b]GUI Scale Factor[/b]: If UI elements appear too large or too small on your screen, you can adjust the scale. Enter a number (e.g., `1.0` for default, `1.2` for larger, `0.9` for smaller) and click 'Set Scale'. The UI will immediately rescale. A restart is not required.\n"
             "• [b]Uninstall App[/b]: This provides a quick way to completely remove all application data, including the downloaded model, settings, and logs. [b]Settings deletion is irreversible.[/b]"
         )
         if hasattr(self, 'help_label'):
             self.help_label.text = help_text
 
     def _build_credits(self):
+        scale = self.gui_scale_factor
         scr = CreditsScreen(name="credits")
-        root = BoxLayout(orientation="vertical", padding=20, spacing=10)
+        root = BoxLayout(orientation="vertical", padding=20 * scale, spacing=10 * scale)
         scr.add_widget(root)
 
         # build header with back button and centered title
-        header = BoxLayout(orientation="horizontal", size_hint_y=None, height=85, spacing=20)
+        header = BoxLayout(orientation="horizontal", size_hint_y=None, height=85 * scale, spacing=20 * scale)
         back_btn = StyledButton(text="Back", size_hint=(None, None), width=180, height=75)
         back_btn.bind(on_release=lambda *_: self._navigate_to("home"))
         header.add_widget(back_btn)
@@ -1793,7 +2341,7 @@ class PacificaAgendaApp(App):
         title = Label(
             text="[b]About & Credits[/b]",
             markup=True,
-            font_size=50,
+            font_size=50 * scale,
             color=[0, 0, 0, 1],
             halign="center",
             valign="middle"
@@ -1802,7 +2350,7 @@ class PacificaAgendaApp(App):
         header.add_widget(title)
         
         # add a spacer to balance the back button, keeping title centered
-        header.add_widget(Widget(size_hint=(None, None), width=150))
+        header.add_widget(Widget(size_hint=(None, None), width=150 * scale))
         root.add_widget(header)
 
         # scrollable area for the main content
@@ -1813,7 +2361,7 @@ class PacificaAgendaApp(App):
         # Spacer above the content
         aligner_layout.add_widget(Widget())
 
-        content = BoxLayout(orientation="vertical", spacing=15, size_hint_y=None, padding=(20, 0)) # Removed vertical padding here, using aligner_layout instead
+        content = BoxLayout(orientation="vertical", spacing=15 * scale, size_hint_y=None, padding=(20 * scale, 0)) # Removed vertical padding here, using aligner_layout instead
         content.bind(minimum_height=content.setter('height'))
         
         aligner_layout.add_widget(content)
@@ -1826,9 +2374,10 @@ class PacificaAgendaApp(App):
 
         # helper to add a centered label with wrapping
         def add_centered(text, fs, bold=False):
+            fs = fs * scale
             formatted_text = f"[b]{text}[/b]" if bold else text
             lbl = Label(
-                text=f"[size={fs}]{formatted_text}[/size]",
+                text=f"[size={int(fs)}]{formatted_text}[/size]",
                 markup=True,
                 font_size=fs,
                 color=[0, 0, 0, 1],
@@ -1841,29 +2390,29 @@ class PacificaAgendaApp(App):
                 texture_size=lambda inst, size: setattr(inst, "height", size[1]),
             )
             content.add_widget(lbl)
-            content.add_widget(Widget(size_hint_y=None, height=5)) # reduced spacing
+            content.add_widget(Widget(size_hint_y=None, height=5 * scale)) # reduced spacing
 
         # Add logo similar to home screen
         try:
             from kivy.uix.image import Image as KivyImage
             if os.path.exists("logo.png"):
-                logo_container = BoxLayout(orientation="horizontal", size_hint=(1, None), height=220) # slightly taller to accommodate padding
+                logo_container = BoxLayout(orientation="horizontal", size_hint=(1, None), height=220 * scale) # slightly taller to accommodate padding
                 logo_container.add_widget(Widget(size_hint_x=1))  # spacer for centering
-                logo = KivyImage(source="logo.png", size_hint=(None, None), size=(200, 200)) # Larger square size
+                logo = KivyImage(source="logo.png", size_hint=(None, None), size=(200 * scale, 200 * scale)) # Larger square size
                 logo_container.add_widget(logo)
                 logo_container.add_widget(Widget(size_hint_x=1))  # spacer for centering
                 content.add_widget(logo_container)
-                content.add_widget(Widget(size_hint_y=None, height=20)) # spacing after logo
+                content.add_widget(Widget(size_hint_y=None, height=20 * scale)) # spacing after logo
         except Exception:
             pass
 
         # app title
         add_centered("City of Pacifica\nAgenda Summary Generator", 46, bold=True)
-        content.add_widget(Widget(size_hint_y=None, height=15))
+        content.add_widget(Widget(size_hint_y=None, height=15 * scale))
         
         # version
-        add_centered("Version 3.0 - Kivy Overhaul", 38, bold=True)
-        content.add_widget(Widget(size_hint_y=None, height=15))
+        add_centered("Version 5.0 - Direct Excel Handling", 38, bold=True)
+        content.add_widget(Widget(size_hint_y=None, height=15 * scale))
 
         # description
         add_centered(
@@ -1872,11 +2421,11 @@ class PacificaAgendaApp(App):
             "for executive review and public transparency.",
             28,
         )
-        content.add_widget(Widget(size_hint_y=None, height=20))
+        content.add_widget(Widget(size_hint_y=None, height=20 * scale))
 
         # development team header
         add_centered("Development Team", 36, bold=True)
-        content.add_widget(Widget(size_hint_y=None, height=15))
+        content.add_widget(Widget(size_hint_y=None, height=15 * scale))
 
         # team details
         add_centered(
@@ -1884,7 +2433,7 @@ class PacificaAgendaApp(App):
             "Project Coordination: [b]Madeleine Hur[/b]",
             30,
         )
-        content.add_widget(Widget(size_hint_y=None, height=20))
+        content.add_widget(Widget(size_hint_y=None, height=20 * scale))
         
         add_centered(
             "Built with Python, Kivy, and local LLMs.\n"
@@ -1895,7 +2444,106 @@ class PacificaAgendaApp(App):
         # let things settle then add to screen
         self.screen_manager.add_widget(scr)
 
+    def _build_model_install(self):
+        """Create the model installation screen (offline + download)."""
+        scale = self.gui_scale_factor
+        scr = ModelInstallScreen(name="model_install")
+        root = BoxLayout(orientation="vertical", padding=40*scale, spacing=20*scale)
+        scr.add_widget(root)
+
+        # Header bar
+        top_bar = BoxLayout(orientation="horizontal", size_hint_y=None, height=75*scale, spacing=10*scale)
+        back_btn = StyledButton(text="Back", size_hint=(None,None), width=180, height=75)
+        back_btn.bind(on_release=lambda *_: self._navigate_to("settings"))
+        top_bar.add_widget(back_btn)
+
+        title = Label(text="[b]Install Models[/b]", markup=True,
+                      font_size=50*scale, color=[0,0,0,1],
+                      halign="center", valign="middle")
+        title.bind(size=lambda inst, *_: inst.setter('text_size')(inst, (inst.width, None)))
+        top_bar.add_widget(title)
+
+        # Add a spacer of the same width as the back button to center the title
+        top_bar.add_widget(Widget(size_hint=(None, None), width=180 * scale))
+        root.add_widget(top_bar)
+
+        # Upload zone for .gguf
+        self.model_upload_zone = ModelUploadZone(self)
+        root.add_widget(self.model_upload_zone)
+
+        # Spacer removed to bring button closer to upload zone. The root layout's
+        # spacing property will handle the gap.
+
+        # Download-from-internet button (centered in its own layout)
+        dl_btn_container = BoxLayout(orientation='horizontal', size_hint_y=None, height=90*scale)
+        dl_btn = StyledButton(text="Download Qwen3-4B-Q6_K.gguf from Online (Uses Internet)",
+                              size_hint=(None,None), width=900, height=90)
+        dl_btn.bind(on_release=lambda *_: self._install_model())
+        
+        dl_btn_container.add_widget(Widget()) # Spacer left
+        dl_btn_container.add_widget(dl_btn)
+        dl_btn_container.add_widget(Widget()) # Spacer right
+        root.add_widget(dl_btn_container)
+
+        # Available models dropdown + refresh + delete
+        list_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=75*scale, spacing=20*scale)  # spacing +10→20
+        list_bar.add_widget(Label(text="Available Models:", color=[0,0,0,1], size_hint_x=None, width=220*scale, font_size=28*scale))
+        self.model_spinner = Spinner(text="Select Model",
+                                     values=self.backend.get_available_models(),
+                                     size_hint=(None,None), width=600*scale, height=75*scale,
+                                     font_size=28*scale,
+                                     background_normal='')
+        self.model_spinner.bind(text=self._on_model_selected)
+        self.model_spinner.bind(on_release=self._on_spinner_click)
+        refresh_btn = StyledButton(text="Refresh", size_hint=(None,None), width=150, height=75)
+        refresh_btn.bind(on_release=lambda *_: self._refresh_models_dropdown())
+        del_btn = StyledButton(text="Delete Model", bg_color_name_override="#D9534F",
+                               size_hint=(None,None), width=200, height=75)
+        del_btn.bind(on_release=lambda *_: self._confirm_delete_model())
+        list_bar.add_widget(self.model_spinner)
+        list_bar.add_widget(refresh_btn)
+        list_bar.add_widget(del_btn)
+        root.add_widget(list_bar)
+
+        # Initial refresh to set proper selection
+        from kivy.clock import Clock
+        Clock.schedule_once(lambda dt: self._refresh_models_dropdown(), 0)
+
+        self.screen_manager.add_widget(scr)
+
+    def _handle_gguf_file(self, file_path: str):
+        """Copy the selected .gguf into the user models dir, preserve filename, then load."""
+        if not file_path or not file_path.lower().endswith(".gguf"):
+            self._show_error("Invalid File Type", "The selected file was not a .gguf model file.\nPlease try again.")
+            return
+        try:
+            if not os.path.isfile(file_path):
+                self._show_error("File Error", "Selected file does not exist.")
+                return
+            models_dir = os.path.join(self.user_data_dir, "models")
+            os.makedirs(models_dir, exist_ok=True)
+            base_name = os.path.basename(file_path)
+            dest_path = os.path.join(models_dir, base_name)
+            shutil.copy(file_path, dest_path)
+
+            # Update config & backend
+            self.CONF["current_model"] = base_name
+            self._save_conf()
+
+            self.backend.load_model_by_filename(base_name)
+
+            # UI updates
+            self._refresh_models_dropdown()
+            self._update_model_status()
+            self._show_info(f"Model '{base_name}' installed and loading in background.")
+        except Exception as exc:
+            self._show_error("Install Error", f"Could not install model: {exc}")
+
     # ---------------------------------------------------------------- Generation logic
+    def _open_model_install_menu(self):
+        self.screen_manager.transition.direction = "left"
+        self.screen_manager.current = "model_install"
+
     def _start_generation(self):
         if not self.selected_indices:
             self._show_error("Nothing Selected", "Please select at least one row.")
@@ -1936,15 +2584,57 @@ class PacificaAgendaApp(App):
                 prompt_template_pass2=self.prompt_pass2,
                 debug_callback=debug_cb,
                 ignore_brackets=self.CONF.get("ignore_brackets", False),
-                csv_headers=self.csv_headers,
+                spreadsheet_headers=self.spreadsheet_headers,
             )
         except RuntimeError as exc:
             self._show_error("Model Error", str(exc))
             self.screen_manager.current = "review" # Go back to review screen
 
     def _cancel_generation(self):
-        self.generation_cancel_event.set()
-        self._navigate_to("review")
+        """
+        Confirm before cancelling long-running generation.
+        Shows a confirmation popup if generation is in progress;
+        otherwise navigates back immediately.
+        """
+        # Determine if a generation is currently in progress
+        in_progress = False
+        try:
+            # save_button is disabled during generation and enabled upon completion
+            in_progress = bool(self.save_button.disabled)
+        except Exception:
+            in_progress = False
+
+        if not in_progress:
+            self._navigate_to("review")
+            return
+
+        scale = self.gui_scale_factor
+
+        content = BoxLayout(orientation='vertical', spacing=10 * scale, padding=10 * scale)
+
+        msg = "This will cancel the current report generation. Are you sure?"
+        lbl = Label(text=msg, halign='center', valign='middle')
+        lbl.bind(size=lambda inst, *_: inst.setter('text_size')(inst, (inst.width, None)))
+        content.add_widget(lbl)
+
+        btn_box = BoxLayout(size_hint_y=None, height=75 * scale, spacing=10 * scale)
+        yes_btn = StyledButton(text="Yes, Cancel", bg_color_name_override="#D9534F", size_hint=(0.5, None), height=75)
+        no_btn = StyledButton(text="No, Continue Generating", size_hint=(0.5, None), height=75)
+
+        btn_box.add_widget(yes_btn)
+        btn_box.add_widget(no_btn)
+        content.add_widget(btn_box)
+
+        popup = Popup(title="Cancel Generation?", content=content, size_hint=(0.7, 0.4), auto_dismiss=False)
+
+        def confirm_cancel(*_):
+            self.generation_cancel_event.set()
+            popup.dismiss()
+            self._navigate_to("review")
+
+        no_btn.bind(on_release=lambda *_: popup.dismiss())
+        yes_btn.bind(on_release=confirm_cancel)
+        popup.open()
 
     # backend callbacks
     def _token_cb(self, txt: str):
@@ -1977,6 +2667,7 @@ class PacificaAgendaApp(App):
         self.generated_report_text = full_text
         self.meeting_dates_for_report = dates
         self.save_button.disabled = False
+        self.copy_button.disabled = False
         self._append_gen_text("\n--- DONE ---\n")
         if Window.focus:
             self._show_info("Generation Complete. You can now save the report.")
@@ -2051,6 +2742,7 @@ class PacificaAgendaApp(App):
                 elif os.path.exists("logo.png"):
                     icon_path = "logo.png"
                 
+
                 notification.notify(
                     title="Generation Complete",
                     message="The agenda summary report is ready to be saved.",
@@ -2063,11 +2755,26 @@ class PacificaAgendaApp(App):
                 # even if dependencies are installed (e.g., D-Bus issues on Linux).
                 print(f"Error sending plyer notification: {e}", file=sys.stderr)
 
+    def _copy_report_to_clipboard(self):
+        from kivy.core.clipboard import Clipboard
+        if self.generated_report_text:
+            Clipboard.copy(self.generated_report_text)
+            self._show_info("Report Copied", "The generated report text has been copied to the clipboard.")
+
     # ---------------------------------------------------------------- Save document
     def _save_report(self):
         if not self.generated_report_text.strip():
             return
-        doc = self.backend.create_word_document(self.generated_report_text, self.meeting_dates_for_report)
+
+        # Determine the reporting year on the frontend
+        current_year = datetime.now().year
+
+        # Pass the year to the backend
+        doc = self.backend.create_word_document(
+            self.generated_report_text,
+            self.meeting_dates_for_report,
+            reporting_year=current_year
+        )
         fname = f"Council_Agenda_Summary_{datetime.now():%Y%m%d}.docx"
         self._save_docx(doc, fname)
 
@@ -2090,7 +2797,7 @@ class PacificaAgendaApp(App):
                 
                 try:
                     doc.save(save_path)
-                    self._show_info(f"saved to {save_path}")
+                    self._show_save_success_popup(save_path)
                 except Exception as exc:
                     self._show_error("save error", str(exc))
             return # Return here to prevent Kivy fallback
@@ -2138,7 +2845,7 @@ class PacificaAgendaApp(App):
             try:
                 doc.save(save_path)
                 popup.dismiss()
-                self._show_info(f"saved to {save_path}")
+                self._show_save_success_popup(save_path)
             except Exception as exc:
                 self._show_error("save error", str(exc))
         
@@ -2158,17 +2865,52 @@ class PacificaAgendaApp(App):
 
     # ---------------------------------------------------------------- Alerts
     @mainthread
-    def _show_error(self, title, msg, markup=False):
+    def _show_error(self, title, msg, markup=False, *args):
         content = Label(text=msg, markup=markup, halign="center")
         popup = Popup(title=title, content=content, size_hint=(0.8, 0.5))
         content.bind(width=lambda *x: content.setter('text_size')(content, (content.width, None)))
         popup.open()
 
     @mainthread
-    def _show_info(self, msg):
+    def _show_info(self, msg, *args):
         content = Label(text=msg, halign="center")
         popup = Popup(title="Info", content=content, size_hint=(0.6, 0.4))
         content.bind(width=lambda *x: content.setter('text_size')(content, (content.width, None)))
+        popup.open()
+
+    @mainthread
+    def _show_save_success_popup(self, path):
+        scale = self.gui_scale_factor
+        content = BoxLayout(orientation='vertical', spacing=10 * scale, padding=10 * scale)
+
+        lbl = Label(text=f"Report saved successfully to:\n{path}", halign='center', valign='middle')
+        lbl.bind(width=lambda inst, w: inst.setter('text_size')(inst, (w, None)))
+        content.add_widget(lbl)
+
+        btn_box = BoxLayout(size_hint_y=None, height=75 * scale, spacing=10 * scale)
+        ok_btn = StyledButton(text="OK", size_hint=(0.5, None), height=75)
+        open_btn = StyledButton(text="Open File Location", size_hint=(0.5, None), height=75)
+        btn_box.add_widget(ok_btn)
+        btn_box.add_widget(open_btn)
+        content.add_widget(btn_box)
+
+        popup = Popup(title="Save Successful", content=content, size_hint=(0.8, 0.4), auto_dismiss=False)
+
+        def open_folder(*_):
+            try:
+                if sys.platform.startswith("win"):
+                    subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
+                elif sys.platform == "darwin":  # macOS
+                    subprocess.Popen(["open", "-R", path])
+                else:  # linux and others
+                    subprocess.Popen(["xdg-open", os.path.dirname(path)])
+            except Exception as e:
+                self._show_error("Open Folder Error", f"Could not open file location:\n{e}")
+            finally:
+                popup.dismiss()
+
+        open_btn.bind(on_release=open_folder)
+        ok_btn.bind(on_release=lambda *_: popup.dismiss())
         popup.open()
 
 
