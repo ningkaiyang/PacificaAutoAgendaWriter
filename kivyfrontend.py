@@ -459,7 +459,7 @@ class UploadZone(BoxLayout):
         scale = app.gui_scale_factor if app else 1.0
         self.is_uninstalled_state = is_uninstalled
         if is_uninstalled:
-            self.upload_label.text = f"[size={int(48 * scale)}][b]App Not Installed[/b][/size]\n[size={int(28 * scale)}]Please go to Settings to install the model.[/size]"
+            self.upload_label.text = f"[size={int(48 * scale)}][b]Setup Required[/b][/size]\n[size={int(28 * scale)}]Please go to Settings to install the model.[/size]"
             self.hint_label.text = ""
             self.overlay_color.rgba = StyledButton.hex2rgba("#D9534F", 0.7) # Red
         else:
@@ -2123,7 +2123,8 @@ class PacificaAgendaApp(App):
             "[size=30][b]Step 7: Save or Copy Your Report[/b][/size]\n"
             "• When the process is finished, the '[b]Save[/b]' and '[b]Copy[/b]' buttons will become active.\n"
             "• A notification sound will play, and the app window will come to the front.\n"
-            "• Click '[b]Save[/b]' to save the report as a formatted Microsoft Word (.docx) file. Alternatively, click '[b]Copy[/b]' to copy the entire report text to your clipboard for pasting elsewhere.\n\n"
+            "• Click '[b]Save[/b]' to save the report as a formatted Microsoft Word (.docx) file. Alternatively, click '[b]Copy[/b]' to copy the entire report text to your clipboard for pasting elsewhere.\n"
+            "• After saving, a confirmation dialog will appear with two buttons: '[b]OK[/b]' (left) and '[b]Open File Location[/b]' (right) to quickly reveal the saved file in your file manager.\n\n"
 
             "[size=34][b]Part 3: Advanced Settings[/b][/size]\n\n"
             "The Settings screen provides powerful customization options:\n"
@@ -2401,8 +2402,50 @@ class PacificaAgendaApp(App):
             self.screen_manager.current = "review" # Go back to review screen
 
     def _cancel_generation(self):
-        self.generation_cancel_event.set()
-        self._navigate_to("review")
+        """
+        Confirm before cancelling long-running generation.
+        Shows a confirmation popup if generation is in progress;
+        otherwise navigates back immediately.
+        """
+        # Determine if a generation is currently in progress
+        in_progress = False
+        try:
+            # save_button is disabled during generation and enabled upon completion
+            in_progress = bool(self.save_button.disabled)
+        except Exception:
+            in_progress = False
+
+        if not in_progress:
+            self._navigate_to("review")
+            return
+
+        scale = self.gui_scale_factor
+
+        content = BoxLayout(orientation='vertical', spacing=10 * scale, padding=10 * scale)
+
+        msg = "This will cancel the current report generation. Are you sure?"
+        lbl = Label(text=msg, halign='center', valign='middle')
+        lbl.bind(size=lambda inst, *_: inst.setter('text_size')(inst, (inst.width, None)))
+        content.add_widget(lbl)
+
+        btn_box = BoxLayout(size_hint_y=None, height=75 * scale, spacing=10 * scale)
+        yes_btn = StyledButton(text="Yes, Cancel", bg_color_name_override="#D9534F", size_hint=(0.5, None), height=75)
+        no_btn = StyledButton(text="No, Continue Generating", size_hint=(0.5, None), height=75)
+
+        btn_box.add_widget(yes_btn)
+        btn_box.add_widget(no_btn)
+        content.add_widget(btn_box)
+
+        popup = Popup(title="Cancel Generation?", content=content, size_hint=(0.7, 0.4), auto_dismiss=False)
+
+        def confirm_cancel(*_):
+            self.generation_cancel_event.set()
+            popup.dismiss()
+            self._navigate_to("review")
+
+        no_btn.bind(on_release=lambda *_: popup.dismiss())
+        yes_btn.bind(on_release=confirm_cancel)
+        popup.open()
 
     # backend callbacks
     def _token_cb(self, txt: str):
@@ -2565,7 +2608,7 @@ class PacificaAgendaApp(App):
                 
                 try:
                     doc.save(save_path)
-                    self._show_info(f"saved to {save_path}")
+                    self._show_save_success_popup(save_path)
                 except Exception as exc:
                     self._show_error("save error", str(exc))
             return # Return here to prevent Kivy fallback
@@ -2613,7 +2656,7 @@ class PacificaAgendaApp(App):
             try:
                 doc.save(save_path)
                 popup.dismiss()
-                self._show_info(f"saved to {save_path}")
+                self._show_save_success_popup(save_path)
             except Exception as exc:
                 self._show_error("save error", str(exc))
         
@@ -2644,6 +2687,41 @@ class PacificaAgendaApp(App):
         content = Label(text=msg, halign="center")
         popup = Popup(title="Info", content=content, size_hint=(0.6, 0.4))
         content.bind(width=lambda *x: content.setter('text_size')(content, (content.width, None)))
+        popup.open()
+
+    @mainthread
+    def _show_save_success_popup(self, path):
+        scale = self.gui_scale_factor
+        content = BoxLayout(orientation='vertical', spacing=10 * scale, padding=10 * scale)
+
+        lbl = Label(text=f"Report saved successfully to:\n{path}", halign='center', valign='middle')
+        lbl.bind(width=lambda inst, w: inst.setter('text_size')(inst, (w, None)))
+        content.add_widget(lbl)
+
+        btn_box = BoxLayout(size_hint_y=None, height=75 * scale, spacing=10 * scale)
+        ok_btn = StyledButton(text="OK", size_hint=(0.5, None), height=75)
+        open_btn = StyledButton(text="Open File Location", size_hint=(0.5, None), height=75)
+        btn_box.add_widget(ok_btn)
+        btn_box.add_widget(open_btn)
+        content.add_widget(btn_box)
+
+        popup = Popup(title="Save Successful", content=content, size_hint=(0.8, 0.4), auto_dismiss=False)
+
+        def open_folder(*_):
+            try:
+                if sys.platform.startswith("win"):
+                    subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
+                elif sys.platform == "darwin":  # macOS
+                    subprocess.Popen(["open", "-R", path])
+                else:  # linux and others
+                    subprocess.Popen(["xdg-open", os.path.dirname(path)])
+            except Exception as e:
+                self._show_error("Open Folder Error", f"Could not open file location:\n{e}")
+            finally:
+                popup.dismiss()
+
+        open_btn.bind(on_release=open_folder)
+        ok_btn.bind(on_release=lambda *_: popup.dismiss())
         popup.open()
 
 

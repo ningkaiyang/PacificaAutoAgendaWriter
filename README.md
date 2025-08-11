@@ -49,7 +49,7 @@ Click "Download Model from HuggingFace Online" on the Install Model page and fol
 4.  **Upload File:** Drag and drop your `.csv` file onto the main window or use the upload area to browse for it.
 5.  **Review Items:** A new screen will appear showing all agenda items. Items flagged for inclusion ('Y' or 'Yes' in the Include column, case-insensitive) will be pre-selected. Review and toggle selections as needed.
 6.  **Generate:** Click the "Generate" button to start the AI summarization process.
-7.  **Save or Copy:** Once complete, you can save the report as a `.docx` file or copy the full text to your clipboard.
+7.  **Save or Copy:** Once complete, you can save the report as a `.docx` file or copy the full text to your clipboard. After saving, a confirmation dialog appears with "OK" on the left and "Open File Location" on the right to quickly reveal the saved file.
 8.  **Switch Models (Optional):** At any time open **Settings → Model Settings** and pick a different model from the drop-down. The new model loads in the background.
 
 ## Current Status
