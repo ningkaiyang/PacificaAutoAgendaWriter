@@ -869,7 +869,6 @@ class PacificaAgendaApp(App):
     def _load_conf(self) -> dict:
         default_conf = {
             "current_model": "",    # <-- NEW
-            "model_path": "",       # legacy key kept for migration
             "prompt_pass1": None,
             "prompt_pass2": None,
             "spreadsheet_headers": None,
@@ -887,10 +886,6 @@ class PacificaAgendaApp(App):
                     data["ignore_brackets"] = False
                 if "gui_scale" not in data:
                     data["gui_scale"] = 1.0
-                # Migration: if legacy model_path exists but current_model missing, derive filename
-                if "current_model" not in data:
-                    legacy_path = data.get("model_path", "")
-                    data["current_model"] = os.path.basename(legacy_path) if legacy_path else ""
                 default_conf.update(data)
         except Exception:
             # On first run or error, populate with defaults
