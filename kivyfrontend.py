@@ -429,7 +429,7 @@ class UploadZone(BoxLayout):
 
         # main upload text/button
         self.upload_label = Label(
-            text=f"[size={int(48 * scale)}][b]Click to Upload CSV[/b][/size]\n[size={int(28 * scale)}]or drag and drop your file here[/size]",
+            text=f"[size={int(48 * scale)}][b]Click to Upload Excel File[/b][/size]\n[size={int(28 * scale)}]or drag and drop your file here[/size]",
             markup=True,
             halign="center",
             valign="middle",
@@ -443,7 +443,7 @@ class UploadZone(BoxLayout):
 
         # file format hint
         self.hint_label = Label(
-            text=f"[size={int(22 * scale)}]Supported format: CSV files only[/size]",  # increased font size
+            text=f"[size={int(22 * scale)}]Supported format: Excel files (.xlsx)[/size]",  # increased font size
             markup=True,
             halign="center",
             valign="middle",
@@ -463,8 +463,8 @@ class UploadZone(BoxLayout):
             self.hint_label.text = ""
             self.overlay_color.rgba = StyledButton.hex2rgba("#D9534F", 0.7) # Red
         else:
-            self.upload_label.text = f"[size={int(48 * scale)}][b]Click to Upload CSV[/b][/size]\n[size={int(28 * scale)}]or drag and drop your file here[/size]"
-            self.hint_label.text = f"[size={int(22 * scale)}]Supported format: CSV files only[/size]"
+            self.upload_label.text = f"[size={int(48 * scale)}][b]Click to Upload Excel File[/b][/size]\n[size={int(28 * scale)}]or drag and drop your file here[/size]"
+            self.hint_label.text = f"[size={int(22 * scale)}]Supported format: Excel files (.xlsx)[/size]"
             self.overlay_color.rgba = StyledButton.hex2rgba(PACIFICA_BLUE, 0.4) # Blue
         self._set_hover_state(False)
 
@@ -1041,8 +1041,8 @@ class PacificaAgendaApp(App):
     def _open_file_browser(self, filetype: str):
         # try native dialog first
         if filetype == "csv":
-            filters = [("CSV files", "*.csv"), ("All files", "*.*")]
-            title = "Select CSV File"
+            filters = [("Excel files", "*.xlsx"), ("All files", "*.*")]
+            title = "Select Excel File"
         elif filetype == "gguf":
             if platform == "macosx":
                 # On macOS, don't filter to avoid lag/greyed-out files. We'll validate post-selection.
@@ -1061,16 +1061,16 @@ class PacificaAgendaApp(App):
         if selection is not None:
             if selection:  # If list is not empty (file was selected)
                 if filetype == "csv":
-                    self._process_csv(selection[0])
+                    self._process_spreadsheet_file(selection[0])
                 elif filetype == "gguf":
                     self._handle_gguf_file(selection[0])
             return  # Return here to prevent Kivy fallback
         
         # fallback to kivy file chooser
         if filetype == "csv":
-            kivy_filters = ["*.csv"]
-            popup_title = "Select CSV"
-            callback = self._process_csv
+            kivy_filters = ["*.xlsx"]
+            popup_title = "Select Excel File"
+            callback = self._process_spreadsheet_file
         elif filetype == "gguf":
             kivy_filters = ["*.gguf"]
             popup_title = "Select .gguf Model File"
@@ -1095,20 +1095,105 @@ class PacificaAgendaApp(App):
         path = file_path_bytes.decode("utf-8")
         current_screen = self.screen_manager.current
 
-        if path.lower().endswith(".csv") and current_screen == "home":
-            self._process_csv(path)
+        if path.lower().endswith(".xlsx") and current_screen == "home":
+            self._process_spreadsheet_file(path)
         elif path.lower().endswith(".gguf") and current_screen == "model_install":
             self._handle_gguf_file(path)
 
-    def _process_csv(self, filepath: str):
+    def _process_spreadsheet_file(self, filepath: str):
+        """Process an Excel file by first allowing user to select a sheet."""
         try:
-            self.csv_data, self.filtered_items = self.backend.process_csv(filepath, self.csv_headers)
+            # Get list of sheet names from the Excel file
+            excel_file = pd.ExcelFile(filepath)
+            sheet_names = excel_file.sheet_names
+            
+            if not sheet_names:
+                self._show_error("Excel Error", "The Excel file contains no sheets.")
+                return
+            
+            # If only one sheet, process it directly
+            if len(sheet_names) == 1:
+                self._load_and_process_sheet(filepath, sheet_names[0])
+            else:
+                # Show sheet selection popup
+                self._show_sheet_selection_popup(filepath, sheet_names)
+                
         except Exception as exc:
-            self._show_error("CSV Error", str(exc))
+            self._show_error("Excel Error", f"Failed to read Excel file: {str(exc)}")
             return
-        # go to review
-        self._populate_review_list()
-        self._navigate_to("review")
+
+    def _show_sheet_selection_popup(self, filepath: str, sheet_names: List[str]):
+        """Display a popup for the user to select which sheet to process."""
+        scale = self.gui_scale_factor
+        
+        content = BoxLayout(orientation='vertical', spacing=10 * scale, padding=10 * scale)
+        
+        # Instructions
+        label = Label(
+            text="Please select the sheet containing your agenda data:",
+            size_hint_y=None,
+            height=40 * scale,
+            font_size=24 * scale,
+            color=[0, 0, 0, 1]
+        )
+        content.add_widget(label)
+        
+        # Sheet selection spinner
+        sheet_spinner = Spinner(
+            text=sheet_names[0],  # Default to first sheet
+            values=sheet_names,
+            size_hint_y=None,
+            height=60 * scale,
+            font_size=26 * scale
+        )
+        content.add_widget(sheet_spinner)
+        
+        # Add spacer
+        content.add_widget(Widget())
+        
+        # Buttons
+        btn_layout = BoxLayout(size_hint_y=None, height=75 * scale, spacing=10 * scale)
+        cancel_btn = StyledButton(text="Cancel")
+        select_btn = StyledButton(text="Select")
+        btn_layout.add_widget(cancel_btn)
+        btn_layout.add_widget(select_btn)
+        content.add_widget(btn_layout)
+        
+        popup = Popup(
+            title="Select Sheet",
+            content=content,
+            size_hint=(0.6, 0.5),
+            auto_dismiss=False
+        )
+        
+        def on_select(*_):
+            selected_sheet = sheet_spinner.text
+            popup.dismiss()
+            self._load_and_process_sheet(filepath, selected_sheet)
+        
+        def on_cancel(*_):
+            popup.dismiss()
+        
+        select_btn.bind(on_release=on_select)
+        cancel_btn.bind(on_release=on_cancel)
+        
+        popup.open()
+    
+    def _load_and_process_sheet(self, filepath: str, sheet_name: str):
+        """Load the selected sheet and process it through the backend."""
+        try:
+            # Read the specific sheet into a DataFrame
+            df = pd.read_excel(filepath, sheet_name=sheet_name)
+            
+            # Process through the backend
+            self.csv_data, self.filtered_items = self.backend.process_spreadsheet_data(df, self.csv_headers)
+            
+            # Navigate to review screen
+            self._populate_review_list()
+            self._navigate_to("review")
+            
+        except Exception as exc:
+            self._show_error("Processing Error", str(exc))
 
     # ---------------------------------------------------------------- Review screen
     def _build_review(self):
@@ -1433,7 +1518,7 @@ class PacificaAgendaApp(App):
 
         # CSV Headers row
         label_headers = Label(
-            text="CSV Column Required Header Names",
+            text="Spreadsheet Column Required Header Names",
             color=[0, 0, 0, 1],
             font_size=28 * scale,
             bold=True,
@@ -1863,7 +1948,7 @@ class PacificaAgendaApp(App):
         content.add_widget(title_label)
         
         info_label = Label(
-            text="Type the exact column header name from your CSV file. This is case-sensitive.",
+            text="Type the exact column header name from your spreadsheet. This is case-sensitive.",
             size_hint_y=None,
             height=50,
             font_size=20,
@@ -2130,9 +2215,10 @@ class PacificaAgendaApp(App):
             "• Use the '[b]Refresh[/b]' button to update the list if you've manually added files, and the '[b]Delete Model[/b]' button to remove the currently selected model from your system.\n\n"
 
             "[size=34][b]Part 2: Generating a Report[/b][/size]\n\n"
-            "[size=30][b]Step 3: Prepare Your CSV File[/b][/size]\n"
-            "• Your data must be in a Comma-Separated Value (.csv) file.\n"
-            "• The app needs specific column headers to find the data. By default, it looks for:\n"
+            "[size=30][b]Step 3: Prepare Your Excel File[/b][/size]\n"
+            "• Your data must be in a Microsoft Excel (.xlsx) file.\n"
+            "• If your file has multiple sheets, the app will prompt you to select which one contains your agenda data.\n"
+            "• The selected sheet needs specific column headers to find the data. By default, it looks for:\n"
             f"    - \"[b]{self.csv_headers['date']}[/b]\" for the Meeting Date\n"
             f"    - \"[b]{self.csv_headers['section']}[/b]\" for the Agenda Section\n"
             f"    - \"[b]{self.csv_headers['item']}[/b]\" for the Agenda Item Title\n"
@@ -2141,7 +2227,8 @@ class PacificaAgendaApp(App):
             "• [b]IMPORTANT[/b]: For the app to correctly identify which rows are agenda items, the value in your 'date' column must start with a number (e.g., '01-Jan-2024' or '1/1/24').\n\n"
 
             "[size=30][b]Step 4: Upload Your File[/b][/size]\n"
-            "• On the home screen, either [b]drag and drop[/b] your .csv file onto the large upload area, or [b]click the area[/b] to open a file browser.\n\n"
+            "• On the home screen, either [b]drag and drop[/b] your .xlsx file onto the large upload area, or [b]click the area[/b] to open a file browser.\n"
+            "• If your Excel file contains multiple sheets, a popup will appear asking you to select which sheet to process.\n\n"
 
             "[size=30][b]Step 5: Review and Select Items[/b][/size]\n"
             "• After uploading, you'll see a list of all agenda items found in your file.\n"
@@ -2166,10 +2253,10 @@ class PacificaAgendaApp(App):
             "[size=34][b]Part 3: Advanced Settings[/b][/size]\n\n"
             "The Settings screen provides powerful customization options:\n"
             "• [b]Model Settings[/b]: This button takes you to the model installation and management screen, as described in Part 1.\n"
-            "• [b]CSV Column Headers[/b]: If your CSV file uses different header names (e.g., 'Meeting_Date' instead of 'MEETING DATE'), you can change what the app looks for here. Click each button ('Date', 'Section', etc.) to edit the corresponding header name.\n"
+            "• [b]Spreadsheet Column Headers[/b]: If your Excel file uses different header names (e.g., 'Meeting_Date' instead of 'MEETING DATE'), you can change what the app looks for here. Click each button ('Date', 'Section', etc.) to edit the corresponding header name.\n"
             "• [b]Prompt Templates[/b]: Advanced users can edit the instructions (prompts) given to the AI. This allows for fine-tuning the summarization and formatting style.\n"
             "• [b]Debug Mode[/b]: Toggling this on will show a detailed debug console on the generation screen, which is useful for troubleshooting. It displays the exact text sent to the AI and performance metrics like generation speed. For developers.\n"
-            "• [b]Ignore Bracketed Text[/b]: When enabled, the app will automatically remove any text found inside square brackets `[]` from your CSV data before sending it to the AI.\n"
+            "• [b]Ignore Bracketed Text[/b]: When enabled, the app will automatically remove any text found inside square brackets `[]` from your spreadsheet data before sending it to the AI.\n"
             "• [b]GUI Scale Factor[/b]: If UI elements appear too large or too small on your screen, you can adjust the scale. Enter a number (e.g., `1.0` for default, `1.2` for larger, `0.9` for smaller) and click 'Set Scale'. The UI will immediately rescale. A restart is not required.\n"
             "• [b]Uninstall App[/b]: This provides a quick way to completely remove all application data, including the downloaded model, settings, and logs. [b]Settings deletion is irreversible.[/b]"
         )
@@ -2261,7 +2348,7 @@ class PacificaAgendaApp(App):
         content.add_widget(Widget(size_hint_y=None, height=15 * scale))
         
         # version
-        add_centered("Version 4.0 - Multi-Model Support", 38, bold=True)
+        add_centered("Version 5.0 - Direct Excel Handling", 38, bold=True)
         content.add_widget(Widget(size_hint_y=None, height=15 * scale))
 
         # description

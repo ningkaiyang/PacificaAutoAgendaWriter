@@ -145,6 +145,7 @@ def main():
         '--hidden-import', 'pandas',
         '--hidden-import', 'huggingface_hub',
         '--hidden-import', 'docx',
+        '--hidden-import', 'openpyxl',
         '--hidden-import', 'llama_cpp',
         # python-docx needs lxml, and pyinstaller can miss this part
         '--hidden-import', 'lxml._elementpath',

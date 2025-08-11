@@ -294,32 +294,22 @@ class AgendaBackend:
         missing_headers = [h for h in required_headers if h not in df.columns]
         if missing_headers:
             missing_str = ", ".join(f"'{h}'" for h in missing_headers)
-            raise ValueError(f"CSV file is missing required columns: {missing_str}")
+            raise ValueError(f"The selected sheet is missing required columns: {missing_str}")
 
-    def process_csv(self, filepath: str, csv_headers: dict) -> tuple[pd.DataFrame, List[pd.Series]]:
-        """Read CSV, validate headers, filter rows → return (df, all_items)."""
-        try:
-            # Use the 'python' engine for more robust parsing of potentially
-            # irregular CSV files. It can handle rows with differing numbers
-            # of columns, which is common in this project's source files.
-            df = pd.read_csv(filepath, engine="python")
-        except Exception as e:
-            # Catch file read errors (e.g., file not found, permission error)
-            # and other pandas parsing errors.
-            raise ValueError(f"Failed to read or parse CSV file: {e}")
-
-        self._validate_headers(df, list(csv_headers.values()))  # Will raise ValueError if invalid
+    def process_spreadsheet_data(self, dataframe: pd.DataFrame, csv_headers: dict) -> tuple[pd.DataFrame, List[pd.Series]]:
+        """Validate headers and filter rows from a DataFrame → return (df, all_items)."""
+        self._validate_headers(dataframe, list(csv_headers.values()))  # Will raise ValueError if invalid
 
         # only keep rows where MEETING DATE starts with a digit - actual agenda items
         all_items: List[pd.Series] = []
-        for _, row in df.iterrows():
+        for _, row in dataframe.iterrows():
             meeting_date = str(row.get(csv_headers["date"], "")).strip()
             if meeting_date and meeting_date[0].isdigit():
                 all_items.append(row)
 
         if not all_items:
-            raise RuntimeError("No valid agenda item rows found in the CSV.")
-        return df, all_items
+            raise RuntimeError("No valid agenda item rows found in the selected sheet.")
+        return dataframe, all_items
 
     # ------------------------------------------------------------------ LLM loading
     def _load_llm_model_async(self, model_path: str | None = None):

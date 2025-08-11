@@ -1,13 +1,14 @@
 # City of Pacifica - Agenda Summary Generator
 
 ## Overview
-This application is designed to significantly streamline the process of creating comprehensive agenda summaries for the City of Pacifica City Council meetings. It operates by ingesting a structured comma-separated value (CSV) file, leveraging a local Large Language Model (LLM) to perform both summarization and categorization of agenda items, and subsequently generating a professionally formatted Microsoft Word (.docx) document that is ready for review and finalization. The goal is to provide an efficient, privacy-focused, and user-friendly tool for managing meeting agenda data.
+This application is designed to significantly streamline the process of creating comprehensive agenda summaries for the City of Pacifica City Council meetings. It operates by directly reading Microsoft Excel (.xlsx) files, allowing users to select a specific sheet for processing. It then leverages a local Large Language Model (LLM) to perform both summarization and categorization of agenda items, and subsequently generates a professionally formatted Microsoft Word (.docx) document that is ready for review and finalization. The goal is to provide an efficient, privacy-focused, and user-friendly tool for managing meeting agenda data.
 
 ## Key Features
-*   **GUI Overhaul:** A redesigned, modern user interface built with Kivy for a more intuitive and visually appealing experience.
+*   **Direct Excel (.xlsx) Handling:** Read Microsoft Excel files directly without needing to export to CSV first.
+*   **Sheet Selection:** If a workbook contains multiple sheets, you are prompted to select the correct one.
 *   **One-Click Model Installation:** A simple, one-time setup process to download and install the required local LLM directly from the settings menu.
-*   **Full Item Parsing & Auto-Selection:** The application now parses all agenda items from the CSV and presents them in a clear, scrollable list. Items can be automatically pre-selected for inclusion based on a flag in the source file.
-*   **Flexible CSV Headers:** Customize the exact column header names (e.g., "MEETING DATE", "AGENDA ITEM") in the settings to match your specific CSV file format. No need to edit the file itself.
+*   **Full Item Parsing & Auto-Selection:** The application parses all agenda items from your selected Excel sheet and presents them in a clear, scrollable list. Items can be automatically pre-selected for inclusion based on a flag in the source file.
+*   **Flexible Column Headers:** Customize the exact column header names (e.g., "MEETING DATE", "AGENDA ITEM") in the settings to match your specific spreadsheet format. No need to edit the file itself.
 *   **Customizable AI Prompts:** Advanced users can modify the prompt templates used for both summarization (Pass 1) and formatting (Pass 2) via the settings menu, allowing for fine-tuned control over the AI's output.
 *   **Self-Scrolling Console:** Both the main generation output and the optional debug console now scroll automatically, allowing you to watch the process unfold in real-time without manual intervention.
 *   **System Notifications:** When a report is finished, the application window is brought to the foreground, a sound effect is played, and a native OS notification is displayed, so you never miss a completed task.
@@ -44,16 +45,17 @@ Click "Download Model from HuggingFace Online" on the Install Model page and fol
     ```bash
     python3 kivyfrontend.py
     ```
-2.  **Install Model (First Time Only):** Upon the first launch, navigate to the `Settings` menu and click the `Install` button to download the required AI model. This is a one-time setup.
-3.  **Prepare CSV:** Ensure your agenda data is in a `.csv` file. The column headers should match the application's settings (which can be configured).
-4.  **Upload File:** Drag and drop your `.csv` file onto the main window or use the upload area to browse for it.
-5.  **Review Items:** A new screen will appear showing all agenda items. Items flagged for inclusion ('Y' or 'Yes' in the Include column, case-insensitive) will be pre-selected. Review and toggle selections as needed.
-6.  **Generate:** Click the "Generate" button to start the AI summarization process.
-7.  **Save or Copy:** Once complete, you can save the report as a `.docx` file or copy the full text to your clipboard. After saving, a confirmation dialog appears with "OK" on the left and "Open File Location" on the right to quickly reveal the saved file.
-8.  **Switch Models (Optional):** At any time open **Settings → Model Settings** and pick a different model from the drop-down. The new model loads in the background.
+2.  **Install Model (First Time Only):** Upon the first launch, navigate to `Settings` -> `Model Settings` to download and install the required AI model. This is a one-time setup.
+3.  **Prepare Your Data:** Ensure your agenda data is in a Microsoft Excel `.xlsx` file. The column headers should match the application's settings (which can be configured in `Settings`).
+4.  **Upload File:** Drag and drop your `.xlsx` file onto the main window or use the upload area to browse for it.
+5.  **Select Sheet:** If your Excel file contains multiple sheets, a popup will appear. Select the sheet that contains your agenda data.
+6.  **Review Items:** A new screen will appear showing all agenda items from the selected sheet. Items flagged for inclusion ('Y' or 'Yes' in the `Include` column, case-insensitive) will be pre-selected. Review and toggle selections as needed.
+7.  **Generate:** Click the "Generate" button to start the AI summarization process.
+8.  **Save or Copy:** Once complete, you can save the report as a `.docx` file or copy the full text to your clipboard. After saving, a confirmation dialog appears with an option to open the file's location.
+9.  **Switch Models (Optional):** At any time, open **Settings → Model Settings** and pick a different model from the drop-down menu. The new model will load in the background.
 
 ## Current Status
-This application is at **Version 4.0 (Multi-Model Support)**. It represents a major architectural and feature update, focusing on user experience, configurability, and a more robust workflow.
+This application is at **Version 5.0 (Direct Excel Handling)**. It represents a major architectural and feature update, simplifying the end-user workflow by removing the need for CSV conversion.
 
 ## Technical Stack
 *   **GUI:** `Kivy`

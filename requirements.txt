@@ -7,6 +7,7 @@ Pillow==11.3.0  # For image support in Kivy
 
 # Data Processing
 pandas==2.3.1
+openpyxl==3.1.5 # For reading .xlsx files
 numpy==2.3.1    # Core dependency for pandas
 
 # LLM and AI
