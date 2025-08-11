@@ -1041,8 +1041,13 @@ class PacificaAgendaApp(App):
     def _open_file_browser(self, filetype: str):
         # try native dialog first
         if filetype == "csv":
-            filters = [("Excel files", "*.xlsx"), ("All files", "*.*")]
             title = "Select Excel File"
+            if platform == "macosx":
+                # On macOS, don't filter to avoid greyed-out files. We'll validate post-selection.
+                filters = None
+            else:
+                # On Windows, use filters for better UX. On other platforms, allow all and validate later.
+                filters = [("Excel files", "*.xlsx"), ("All files", "*.*")]
         elif filetype == "gguf":
             if platform == "macosx":
                 # On macOS, don't filter to avoid lag/greyed-out files. We'll validate post-selection.
@@ -1060,15 +1065,20 @@ class PacificaAgendaApp(App):
         # If native dialog is not supported/failed, it will be None.
         if selection is not None:
             if selection:  # If list is not empty (file was selected)
+                path = selection[0]
                 if filetype == "csv":
-                    self._process_spreadsheet_file(selection[0])
+                    if not path.lower().endswith(".xlsx"):
+                        self._show_error("Invalid File Type", "Please select a Microsoft Excel .xlsx file.")
+                        return
+                    self._process_spreadsheet_file(path)
                 elif filetype == "gguf":
-                    self._handle_gguf_file(selection[0])
+                    self._handle_gguf_file(path)
             return  # Return here to prevent Kivy fallback
         
         # fallback to kivy file chooser
         if filetype == "csv":
-            kivy_filters = ["*.xlsx"]
+            # On macOS, allow all files and post-validate like native. Else, filter to .xlsx for convenience.
+            kivy_filters = None if platform == "macosx" else ["*.xlsx"]
             popup_title = "Select Excel File"
             callback = self._process_spreadsheet_file
         elif filetype == "gguf":
@@ -1085,8 +1095,13 @@ class PacificaAgendaApp(App):
 
         def _file_chosen(instance, selection, touch):
             if selection:
+                path = selection[0]
+                if filetype == "csv" and not path.lower().endswith(".xlsx"):
+                    # Keep popup open; inform user of invalid selection
+                    self._show_error("Invalid File Type", "Please select a Microsoft Excel .xlsx file.")
+                    return
                 popup.dismiss()
-                callback(selection[0])
+                callback(path)
 
         chooser.bind(on_submit=_file_chosen)
         popup.open()
@@ -1123,7 +1138,7 @@ class PacificaAgendaApp(App):
             return
 
     def _show_sheet_selection_popup(self, filepath: str, sheet_names: List[str]):
-        """Display a popup for the user to select which sheet to process."""
+        """Display a popup with a scrollable, clickable list of sheets. Selected row is blue-highlighted."""
         scale = self.gui_scale_factor
         
         content = BoxLayout(orientation='vertical', spacing=10 * scale, padding=10 * scale)
@@ -1137,20 +1152,62 @@ class PacificaAgendaApp(App):
             color=[0, 0, 0, 1]
         )
         content.add_widget(label)
-        
-        # Sheet selection spinner
-        sheet_spinner = Spinner(
-            text=sheet_names[0],  # Default to first sheet
-            values=sheet_names,
-            size_hint_y=None,
-            height=60 * scale,
-            font_size=26 * scale
-        )
-        content.add_widget(sheet_spinner)
-        
-        # Add spacer
-        content.add_widget(Widget())
-        
+
+        # Scrollable list of sheet names
+        from math import ceil
+        row_height = 60 * scale
+        max_visible_rows = 6  # show up to 6 rows before scrolling
+        scroll_height = max(row_height, min(len(sheet_names), max_visible_rows) * row_height + 10 * scale)
+
+        scroll = ScrollView(size_hint_y=None, height=scroll_height, scroll_wheel_distance=150 * scale)
+        list_container = BoxLayout(orientation='vertical', spacing=6 * scale, size_hint_y=None)
+        list_container.bind(minimum_height=list_container.setter('height'))
+        scroll.add_widget(list_container)
+        content.add_widget(scroll)
+
+        # Track selection
+        selected_index = [0]  # mutable container for closure
+        buttons: List[Button] = []
+
+        # Helper to update visuals for selection
+        def update_visuals():
+            for i, btn in enumerate(buttons):
+                if i == selected_index[0]:
+                    btn.background_normal = ""
+                    btn.background_color = StyledButton.hex2rgba(PACIFICA_BLUE, 1.0)
+                    btn.color = [1, 1, 1, 1]
+                else:
+                    btn.background_normal = ""
+                    btn.background_color = [1, 1, 1, 1]
+                    btn.color = [0, 0, 0, 1]
+
+        # Create a button for each sheet
+        for idx, name in enumerate(sheet_names):
+            btn = Button(
+                text=name,
+                size_hint_y=None,
+                height=row_height,
+                font_size=26 * scale,
+                background_normal="",
+                background_color=[1, 1, 1, 1],
+                color=[0, 0, 0, 1],
+                halign="left",
+                valign="middle"
+            )
+            # Ensure text wraps/pads nicely
+            btn.text_size = (None, None)
+
+            def on_btn_release(instance, i=idx):
+                selected_index[0] = i
+                update_visuals()
+
+            btn.bind(on_release=on_btn_release)
+            buttons.append(btn)
+            list_container.add_widget(btn)
+
+        # Initialize visuals with first item selected
+        update_visuals()
+
         # Buttons
         btn_layout = BoxLayout(size_hint_y=None, height=75 * scale, spacing=10 * scale)
         cancel_btn = StyledButton(text="Cancel")
@@ -1162,12 +1219,13 @@ class PacificaAgendaApp(App):
         popup = Popup(
             title="Select Sheet",
             content=content,
-            size_hint=(0.6, 0.5),
+            size_hint=(0.6, 0.6),
             auto_dismiss=False
         )
         
         def on_select(*_):
-            selected_sheet = sheet_spinner.text
+            idx = selected_index[0] if 0 <= selected_index[0] < len(sheet_names) else 0
+            selected_sheet = sheet_names[idx]
             popup.dismiss()
             self._load_and_process_sheet(filepath, selected_sheet)
         
