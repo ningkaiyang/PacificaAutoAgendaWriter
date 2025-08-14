@@ -447,7 +447,7 @@ class UploadZone(BoxLayout):
 
         super().__init__(
             orientation="vertical",
-            size_hint=(1, 0.7),
+            size_hint=(1, 7.0),
             padding=40 * scale,
             spacing=20 * scale,
             **kw,
@@ -1062,6 +1062,21 @@ class PacificaAgendaApp(App):
 
         nav_bar.add_widget(Widget())
         root.add_widget(nav_bar)
+        
+        # Add a spacer to push the source label to the bottom.
+        root.add_widget(Widget(size_hint_y=1))
+
+        # Small note about source code / extra details
+        source_label = Label(
+            text=f"[size={int(24 * scale)}]Source code and extra details available at the bottom of the Help menu![/size]",
+            markup=True,
+            halign="center",
+            valign="middle",
+            color=[0.45, 0.58, 0.7, 1],
+            size_hint_y=None,
+            height=30 * scale,
+        )
+        root.add_widget(source_label)
 
         root.add_widget(Label(size_hint_y=0.1))  # smaller spacer
         self.screen_manager.add_widget(scr)
@@ -2273,6 +2288,10 @@ class PacificaAgendaApp(App):
         """Handle hyperlink clicks in labels."""
         if ref == "github_repo":
             webbrowser.open("https://github.com/ningkaiyang/PacificaAutoAgendaWriter")
+        elif ref == "nick_linkedin":
+            webbrowser.open("https://www.linkedin.com/in/nickolasyang/")
+        elif ref == "madeleine_linkedin":
+            webbrowser.open("https://www.linkedin.com/in/madeleine-hur")
 
     # ---------------------------------------------------------------- Help & Credits
     def _build_help(self):
@@ -2371,7 +2390,7 @@ class PacificaAgendaApp(App):
             "• Uninstall App: This provides a quick way to completely remove all application data, including the downloaded model, settings, and logs. [b]Settings deletion is irreversible.[/b]\n\n"
 
             f"[size={int(34 * scale)}][b]More Information (Video Guide!) & Source Code[/b][/size]\n\n"
-            "For the full documentation, source code, and latest releases, please visit the GitHub repository:\n"
+            "For the full documentation, source code, latest releases, and video guide, please visit the GitHub repository:\n"
             "[ref=github_repo][u][color=4682B4]https://github.com/ningkaiyang/PacificaAutoAgendaWriter[/color][/u][/ref]"
         )
         if hasattr(self, 'help_label'):
@@ -2439,6 +2458,7 @@ class PacificaAgendaApp(App):
             lbl.bind(
                 width=lambda inst, w: inst.setter("text_size")(inst, (w, None)),
                 texture_size=lambda inst, size: setattr(inst, "height", size[1]),
+                on_ref_press=self._on_ref_press,
             )
             content.add_widget(lbl)
             content.add_widget(Widget(size_hint_y=None, height=5 * scale)) # reduced spacing
@@ -2475,20 +2495,20 @@ class PacificaAgendaApp(App):
         content.add_widget(Widget(size_hint_y=None, height=20 * scale))
 
         # development team header
-        add_centered("Development Team", 36, bold=True)
+        add_centered("Development Team (Best Interns Ever !!! 2025)", 36, bold=True)
         content.add_widget(Widget(size_hint_y=None, height=15 * scale))
 
         # team details
         add_centered(
-            "Project Lead & Developer: [b]Nickolas Yang[/b]\n"
-            "Project Coordination: [b]Madeleine Hur[/b]",
+            "Project Lead & Developer: [ref=nick_linkedin][u][color=4682B4]Nickolas Yang[/color][/u][/ref]\n"
+            "Project Coordination: [ref=madeleine_linkedin][u][color=4682B4]Madeleine Hur[/color][/u][/ref]",
             30,
         )
         content.add_widget(Widget(size_hint_y=None, height=20 * scale))
         
         add_centered(
-            "Built with Python, Kivy, and local LLMs.\n"
-            "Powered by llama-cpp-python for privacy-focused AI processing.",
+            "Built with Python, Kivy, and HuggingFace Open-Source Local LLMs.\n"
+            "Powered by llama-cpp-python for privacy-focused local AI processing.",
             26,
         )
 
