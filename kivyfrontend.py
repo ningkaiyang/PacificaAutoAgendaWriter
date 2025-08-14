@@ -25,6 +25,7 @@ import sys
 import threading
 import traceback
 import re
+import time  # Added for sleep-based retry
 from datetime import datetime
 from typing import List, Callable
 
@@ -81,8 +82,8 @@ from kivybackend import AgendaBackend, PROMPT_TEMPLATE_PASS1, PROMPT_TEMPLATE_PA
 # --------------------------------------------------------------------------------------
 # Constants
 # --------------------------------------------------------------------------------------
-MODEL_REPO = "unsloth/Qwen3-4B-GGUF"
-MODEL_FILENAME = "Qwen3-4B-Q6_K.gguf"
+MODEL_REPO = "unsloth/Qwen3-4B-Instruct-2507-GGUF"
+MODEL_FILENAME = "Qwen3-4B-Instruct-2507-Q4_1.gguf"
 
 PACIFICA_BLUE = "#4682B4"  # headers / accents
 PACIFICA_SAND = "#F5F5DC"  # background
@@ -1113,23 +1114,40 @@ class PacificaAgendaApp(App):
             self._handle_gguf_file(path)
 
     def _process_spreadsheet_file(self, filepath: str):
-        """Process an Excel file by first allowing user to select a sheet."""
+        """Process an Excel file by first allowing user to select a sheet.
+
+        Uses a context-managed ExcelFile to ensure handles are closed promptly.
+        Retries once after a short delay if Windows intermittently throws
+        'ValueError: I/O operation on closed file'.
+        """
         try:
-            # Get list of sheet names from the Excel file
-            excel_file = pd.ExcelFile(filepath)
-            sheet_names = excel_file.sheet_names
-            
+            # Helper wrapped in a context-manager so the underlying file handle
+            # is deterministically released as soon as we're done.
+            def _get_sheet_names():
+                with pd.ExcelFile(filepath) as excel_file:
+                    return excel_file.sheet_names
+
+            try:
+                sheet_names = _get_sheet_names()
+            except ValueError as e:
+                # Windows race-condition workaround: retry once after 100 ms.
+                if "I/O operation on closed file" in str(e):
+                    time.sleep(0.1)
+                    sheet_names = _get_sheet_names()
+                else:
+                    raise
+
             if not sheet_names:
                 self._show_error("Excel Error", "The Excel file contains no sheets.")
                 return
-            
+
             # If only one sheet, process it directly
             if len(sheet_names) == 1:
                 self._load_and_process_sheet(filepath, sheet_names[0])
             else:
                 # Show sheet selection popup
                 self._show_sheet_selection_popup(filepath, sheet_names)
-                
+
         except Exception as exc:
             self._show_error("Excel Error", f"Failed to read Excel file: {str(exc)}")
             return
@@ -1243,18 +1261,33 @@ class PacificaAgendaApp(App):
         popup.open()
     
     def _load_and_process_sheet(self, filepath: str, sheet_name: str):
-        """Load the selected sheet and process it through the backend."""
+        """Load the selected sheet and process it through the backend.
+
+        Wraps `pd.read_excel` in a retry to mitigate transient Windows file-locking.
+        """
         try:
-            # Read the specific sheet into a DataFrame
-            df = pd.read_excel(filepath, sheet_name=sheet_name)
-            
+            # Read the specific sheet into a DataFrame with retry.
+            def _read_df():
+                return pd.read_excel(filepath, sheet_name=sheet_name)
+
+            try:
+                df = _read_df()
+            except ValueError as e:
+                if "I/O operation on closed file" in str(e):
+                    time.sleep(0.1)
+                    df = _read_df()
+                else:
+                    raise
+
             # Process through the backend
-            self.spreadsheet_data, self.filtered_items = self.backend.process_spreadsheet_data(df, self.spreadsheet_headers)
-            
+            self.spreadsheet_data, self.filtered_items = self.backend.process_spreadsheet_data(
+                df, self.spreadsheet_headers
+            )
+
             # Navigate to review screen
             self._populate_review_list()
             self._navigate_to("review")
-            
+
         except Exception as exc:
             self._show_error("Processing Error", str(exc))
 
@@ -1923,7 +1956,7 @@ class PacificaAgendaApp(App):
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
         
         label = Label(
-            text=f"This will download the model ({MODEL_FILENAME}, ~4GB) to your user data directory:\n"
+            text=f"This will download the model ({MODEL_FILENAME}, ~2.6GB) to your user data directory:\n"
                  f"{self.user_data_dir}\n\n"
                  f"A 'models' folder will be created if it doesn't exist.\n"
                  f"This may take a while depending on your internet connection.\n\n"
@@ -2264,8 +2297,8 @@ class PacificaAgendaApp(App):
             "You have two ways to add a model:\n\n"
             "1. [b]Install the Recommended Model (Requires Internet)[/b]\n"
             "   • This is the easiest way to get started.\n"
-            "   • Click the large button at the bottom: '[b]Download Qwen3-4B-Q6_K.gguf from Online[/b]'.\n"
-            "   • The application will download the recommended model (approx. 4 GB) and install it for you. This may take a few minutes.\n\n"
+            "   • Click the large button at the bottom: '[b]Download Qwen3-4B-Instruct-2507-Q4_1.gguf from Online[/b]'.\\n"
+            "   • The application will download the recommended model (approx. 2.6 GB) and install it for you. This may take a few minutes.\\n\\n"
             "2. [b]Install a Custom Model from a File (Offline)[/b]\n"
             "   • This option is for installing any GGUF-format model you have saved on your computer.\n"
             "   • In the large upload area, either [b]click to browse[/b] for a `.gguf` file or [b]drag and drop[/b] the file directly onto the zone.\n"
@@ -2476,7 +2509,7 @@ class PacificaAgendaApp(App):
 
         # Download-from-internet button (centered in its own layout)
         dl_btn_container = BoxLayout(orientation='horizontal', size_hint_y=None, height=90*scale)
-        dl_btn = StyledButton(text="Download Qwen3-4B-Q6_K.gguf from Online (Uses Internet)",
+        dl_btn = StyledButton(text="Download Qwen3-4B-Instruct-2507-Q4_1.gguf from Online (Uses Internet)",
                               size_hint=(None,None), width=900, height=90)
         dl_btn.bind(on_release=lambda *_: self._install_model())
         

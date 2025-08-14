@@ -27,8 +27,8 @@ from docx.shared import Inches, Pt
 from llama_cpp import Llama
 
 # Model to download
-MODEL_REPO = "unsloth/Qwen3-4B-GGUF"
-MODEL_FILENAME = "Qwen3-4B-Q6_K.gguf"
+MODEL_REPO = "unsloth/Qwen3-4B-Instruct-2507-GGUF"
+MODEL_FILENAME = "Qwen3-4B-Instruct-2507-Q4_1.gguf"
 
 # resource module is Unix-specific, so we remove it for Windows compatibility.
 resource = None

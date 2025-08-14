@@ -32,7 +32,7 @@ This application is designed to significantly streamline the process of creating
 After cloning/installing dependencies, you can prepare the model in one of two ways:
 
 **A. Offline Install (no internet required)**
-1. Obtain the model file `Qwen3-4B-Q6_K.gguf` (≈ 4 GB) from a trusted source.
+1. Obtain the model file `Qwen3-4B-Instruct-2507-Q4_1.gguf` (≈ 2.6 GB) from a trusted source.
 2. Launch the application and open **Settings → Model Settings**.
 3. On the **Install Model** page, drag-and-drop the `.gguf` file (or click to browse).
    The file will be copied to your user data directory and renamed automatically.
