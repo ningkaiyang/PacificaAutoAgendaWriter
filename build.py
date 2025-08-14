@@ -9,11 +9,11 @@ from pathlib import Path
 APP_NAME = "AutoAgendaWriter"
 ENTRY_POINT = "kivyfrontend.py"
 ICON_FILE = "logo.ico"
-# set to False for a final release build
-DEBUG_MODE = False  # okay, time for the final build, no more console
+# Set to False for a final release build
+DEBUG_MODE = False
 
 def clean_previous_build():
-    # a good practice to clean up old files before a new build
+    # A good practice to clean up old files before a new build
     print("--- Cleaning up previous build artifacts...")
     for folder in ["build", "dist"]:
         if os.path.exists(folder):
@@ -43,9 +43,9 @@ def find_llama_cpp_lib():
 def find_kivy_hooks():
     """Find the path to Kivy's PyInstaller hooks."""
     try:
-        import kivy  # it's lowercase 'k'
+        import kivy
         kivy_path = Path(kivy.__file__).parent
-        # this is the standard path for the hooks
+        # This is the standard path for the hooks
         hooks_path = kivy_path / "tools" / "packaging" / "pyinstaller_hooks"
         if hooks_path.is_dir():
             print(f"Found Kivy hooks at: {hooks_path}")
@@ -91,10 +91,10 @@ def main():
         '--name', APP_NAME,
         '--onefile',
         f'--icon={ICON_FILE}',
-        '--log-level', 'INFO',  # okay lets add more logging to see what's up
+        '--log-level', 'INFO',
     ]
 
-    # lets switch between console and windowed mode
+    # Set console or windowed mode based on DEBUG_MODE flag
     if DEBUG_MODE:
         print("--- Building in DEBUG mode (console window will be visible) ---")
         pyinstaller_args.append('--console')
@@ -104,7 +104,7 @@ def main():
 
 
     # --- Add data files ---
-    # pyinstaller's --add-data format is 'source;dest_in_bundle' on windows
+    # --add-data format is 'source:dest' on Unix, 'source;dest' on Windows. os.pathsep handles this.
     pyinstaller_args.extend([
         '--add-data', f'logo.png{os.pathsep}.',
         '--add-data', f'notification.wav{os.pathsep}.',
@@ -147,9 +147,7 @@ def main():
         '--hidden-import', 'pyperclip',
     ])
     
-    # okay let's exclude modules we know we don't need
-    # this should clean up the camera and gstreamer warnings in the log
-    # the app log also says it ignores some of these, so let's be explicit
+    # Exclude unused Kivy modules to reduce bundle size and log noise (e.g., from camera/gstreamer).
     pyinstaller_args.extend([
         '--exclude-module', 'kivy.core.camera.camera_picamera',
         '--exclude-module', 'kivy.core.camera.camera_gi',

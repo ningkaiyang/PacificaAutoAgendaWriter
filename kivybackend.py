@@ -68,14 +68,14 @@ class TokenStreamer:
         self._start = time.perf_counter()
         self._tok = 0
         self.debug_callback = debug_callback
-        self.gui_callback = gui_callback   # NEW
+        self.gui_callback = gui_callback
 
     def __call__(self, chunk: dict):
         tok = chunk["choices"][0]["delta"].get("content", "")
         if not tok:
             return
         self._tok += 1
-        # Print everything to console for debugging
+        # Stream token to debug callback, or print to stdout as a fallback.
         if self.debug_callback:
             self.debug_callback(tok)
         else:
@@ -92,7 +92,6 @@ class TokenStreamer:
                 self.debug_callback(stats + "\n")
             else:
                 print(stats)
-            # Always push stats to GUI if callback provided
             if self.gui_callback:
                 self.gui_callback(stats + "\n")
 
@@ -134,7 +133,7 @@ class GUITokenFilter:
 
 
 # --------------------------------------------------------------------------------------
-# Constant definitions (copied from original file)
+# Constant definitions
 # --------------------------------------------------------------------------------------
 PROMPT_TEMPLATE_PASS1 = """You are an expert city clerk. Your task is to summarize each agenda item into ONE short clause.
 
@@ -262,8 +261,6 @@ class AgendaBackend:
         self.user_data_dir = user_data_dir
         self.model_path = model_path
         self.llm_model: Llama | None = None
-        # if self.model_path and os.path.exists(self.model_path):
-        #     self._load_llm_model_async()  # Non-blocking
 
     # ----------------------------  Multi-Model helpers  ----------------------------
     def _get_models_dir(self) -> str:
@@ -292,7 +289,6 @@ class AgendaBackend:
         full_path = os.path.join(self._get_models_dir(), filename)
         if not os.path.exists(full_path):
             raise ModelNotFoundError(f"Model file not found: {full_path}")
-        # Update state then async-load
         self.model_path = full_path
         self._load_llm_model_async(full_path)
 
@@ -307,7 +303,7 @@ class AgendaBackend:
 
     def process_spreadsheet_data(self, dataframe: pd.DataFrame, spreadsheet_headers: dict) -> tuple[pd.DataFrame, List[pd.Series]]:
         """Validate headers and filter rows from a DataFrame → return (df, all_items)."""
-        self._validate_headers(dataframe, list(spreadsheet_headers.values()))  # Will raise ValueError if invalid
+        self._validate_headers(dataframe, list(spreadsheet_headers.values()))
 
         # only keep rows where MEETING DATE starts with a digit - actual agenda items
         all_items: List[pd.Series] = []
@@ -382,14 +378,12 @@ class AgendaBackend:
 
             final_model_path = new_llm_instance.model_path
             
-            # The model is now loaded, assign it to the backend
             self.llm_model = new_llm_instance
-            # Get the actual path string from the instance
             self.model_path = final_model_path
 
             print(f"[backend] Model downloaded and loaded from: {final_model_path}")
             if done_callback:
-                done_callback(final_model_path)  # Pass the string path back to the frontend
+                done_callback(final_model_path)
 
         except Exception as e:
             traceback.print_exc()
@@ -510,7 +504,6 @@ class AgendaBackend:
                         sec = re.sub(r'\[.*?\]', '', sec)
                         title = re.sub(r'\[.*?\]', '', title)
                         notes = re.sub(r'\[.*?\]', '', notes)
-                    # Build the entry
                     entry = f"- Item: {title}, Section: \"{sec}\""
                     if (notes.lower() != "nan") and (notes != ""):  # Empty notes not included
                         entry += f", Notes: \"{notes}\""
@@ -542,7 +535,7 @@ class AgendaBackend:
                 
                 # Collect summarized items from Pass 1
                 think_streamer = TokenStreamer(debug_callback=debug_cb,
-                                               gui_callback=token_cb)  # patched
+                                               gui_callback=token_cb)
                 raw_summary = ""
                 for chunk in pass1_stream:
                     if cancel_event and cancel_event.is_set():
@@ -556,10 +549,10 @@ class AgendaBackend:
                     if token and token_cb:
                         token_cb(token)
                     raw_summary += token
-                    think_streamer(chunk)  # count tokens and print for debug
+                    think_streamer(chunk)
                 think_streamer.done()
 
-                if token_cb:  # if user gui display, then print a newline between
+                if token_cb:
                     token_cb("\n\n")
 
                 # Clean up summarized_items to remove any incomplete thinking tags
@@ -589,10 +582,9 @@ class AgendaBackend:
                     stream=True,
                 )
 
-                # This is the stream we will show to the user
                 # Stream to console (unfiltered) and GUI (raw)
                 streamer = TokenStreamer(debug_callback=debug_cb,
-                                         gui_callback=token_cb)  # patched
+                                         gui_callback=token_cb)
                 
                 for chunk in pass2_stream:
                     if cancel_event and cancel_event.is_set():

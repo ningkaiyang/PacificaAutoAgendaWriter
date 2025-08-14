@@ -64,7 +64,7 @@ except Exception as e:
 import threading
 import traceback
 import re
-import time  # Added for sleep-based retry
+import time
 from datetime import datetime
 from typing import List, Callable
 
@@ -136,12 +136,12 @@ DEFAULT_SPREADSHEET_HEADERS = {
     "include": "Include in Summary for Mayor",
 }
 
-# Column sizing for review screen (proportional widths based on Treeview)
+# Column sizing for review screen (proportional widths)
 COLUMN_SIZES = {
-    "date": 0.1,    # Corresponds to roughly 100px in customtk
-    "section": 0.17, # Corresponds to roughly 180px in customtk
-    "item": 0.38,   # Corresponds to roughly 400px in customtk
-    "notes": 0.35   # Corresponds to roughly 350px in customtk
+    "date": 0.1,
+    "section": 0.17,
+    "item": 0.38,
+    "notes": 0.35
 }
 
 # --------------------------------------------------------------------------------------
@@ -188,7 +188,6 @@ def native_open_file_dialog(title="Select File", file_types=None, multiple=False
             return POSIX path of theFile
             '''
             
-            # run osascript
             result = subprocess.run(
                 ["osascript", "-e", full_script],
                 capture_output=True,
@@ -240,7 +239,6 @@ def native_save_file_dialog(title="Save File", filename="", file_types=None):
             return POSIX path of theFile
             '''
             
-            # run osascript
             result = subprocess.run(
                 ["osascript", "-e", script],
                 capture_output=True,
@@ -279,7 +277,7 @@ class StyledButton(Button):
 
         # Determine the initial base color based on override or default
         initial_hex_color = bg_color_name_override if bg_color_name_override else PACIFICA_BLUE
-        self.base_bg_color_rgba = self.hex2rgba(initial_hex_color, 1.0) # Set the ListProperty here
+        self.base_bg_color_rgba = self.hex2rgba(initial_hex_color, 1.0)
 
         # set a default font_size if not provided by the caller
         if "font_size" not in kw:
@@ -296,7 +294,7 @@ class StyledButton(Button):
             background_normal="",
             background_color=[0, 0, 0, 0],  # transparent background
             color=[1, 1, 1, 1],
-            **kw, # 'bg_color_name_override' is now consumed by the method signature, not in **kw
+            **kw,
         )
         
         # bind to mouse position to check for hover
@@ -307,7 +305,7 @@ class StyledButton(Button):
             size=self._update_rect,
             state=self._update_color,
             is_hovered=self._update_color,
-            base_bg_color_rgba=self._update_color # New binding for property changes
+            base_bg_color_rgba=self._update_color
         )
 
         with self.canvas.before:
@@ -316,7 +314,7 @@ class StyledButton(Button):
             self.shadow = RoundedRectangle(pos=self.pos, size=self.size, radius=[15 * scale])
             
             # Main background. Use base_bg_color_rgba for the initial color.
-            self.bg_color = Color(*self.base_bg_color_rgba) # Set initial drawing color from the property
+            self.bg_color = Color(*self.base_bg_color_rgba)
             self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[15 * scale])
 
     def on_mouse_pos(self, *args):
@@ -483,13 +481,13 @@ class UploadZone(BoxLayout):
 
         # file format hint
         self.hint_label = Label(
-            text=f"[size={int(22 * scale)}]Supported format: Excel files (.xlsx)[/size]",  # increased font size
+            text=f"[size={int(22 * scale)}]Supported format: Excel files (.xlsx)[/size]",
             markup=True,
             halign="center",
             valign="middle",
             color=[1, 1, 1, 0.8],  # slightly transparent white
             size_hint_y=None,
-            height=35 * scale,  # increased height
+            height=35 * scale,
         )
         self.hint_label.bind(size=lambda inst, *_: inst.setter("text_size")(inst, (inst.width, None)))
         self.add_widget(self.hint_label)
@@ -570,9 +568,6 @@ class ModelUploadZone(UploadZone):
         self.hint_label.text = f"[size={int(22*scale)}]Accepted file: *.gguf[/size]"
 
 
-    # Hover colour tweak remains inherited.
-
-
 # --------------------------------------------------------------------------------------
 # Simple item widget for the list
 # --------------------------------------------------------------------------------------
@@ -637,7 +632,7 @@ class AgendaItem(BoxLayout):
             color=[0, 0, 0, 1],
             size_hint_x=size_hint_x_val,
             size_hint_y=None,  # Important: don't let label stretch vertically by default
-            font_size=26 * scale # Increased font size
+            font_size=26 * scale
         )
     
     def _setup_initial_size(self):
@@ -695,7 +690,6 @@ class AgendaItem(BoxLayout):
         self.selected = value
         self.update_background()
         
-        # notify the app
         if value:
             self.app.mark_selected(self.index)
         else:
@@ -804,7 +798,6 @@ class SelectableItem(RecycleDataViewBehavior, BoxLayout):
         if rv and hasattr(rv, 'data') and self.index is not None and self.index < len(rv.data):
             rv.data[self.index]["selected"] = value
             
-            # Notify the app
             if hasattr(rv, 'app'):
                 if value:
                     rv.app.mark_selected(self.index)
@@ -908,7 +901,7 @@ class PacificaAgendaApp(App):
 
     def _load_conf(self) -> dict:
         default_conf = {
-            "current_model": "",    # <-- NEW
+            "current_model": "",
             "prompt_pass1": None,
             "prompt_pass2": None,
             "spreadsheet_headers": None,
@@ -934,7 +927,6 @@ class PacificaAgendaApp(App):
 
     def _save_conf(self):
         self.CONF["gui_scale"] = self.gui_scale_factor
-        # 'current_model' already updated elsewhere; just ensure it's present before save
         try:
             with open(self.config_file, "w", encoding="utf-8") as fp:
                 json.dump(self.CONF, fp, indent=2)
@@ -960,7 +952,7 @@ class PacificaAgendaApp(App):
         self._build_settings()
         self._build_help()
         self._build_credits()
-        self._build_model_install()  # added for offline install screen
+        self._build_model_install()
 
         # Set initial model status in settings UI
         self._update_model_status()
@@ -1014,7 +1006,6 @@ class PacificaAgendaApp(App):
             # default direction for other transitions
             self.screen_manager.transition.direction = "left"
         
-        # change to the new screen
         self.screen_manager.current = screen_name
 
     # ---------------------------------------------------------------- Home
@@ -1339,7 +1330,7 @@ class PacificaAgendaApp(App):
 
         topbar = BoxLayout(orientation="horizontal", size_hint_y=None, height=75 * scale, spacing=10 * scale)
         back_btn = StyledButton(text="Back", size_hint=(None, None), width=180, height=75)
-        back_btn.bind(on_release=lambda *_: self._navigate_to("home"))  # use navigation method
+        back_btn.bind(on_release=lambda *_: self._navigate_to("home"))
         topbar.add_widget(back_btn)
 
         self.review_label = Label(text="Items Selected: 0", color=[0, 0, 0, 1], font_size=50 * scale)
@@ -1384,7 +1375,7 @@ class PacificaAgendaApp(App):
         layout.add_widget(header_container)
         header_container.add_widget(header_labels_container)
 
-        scroll = ScrollView(size_hint=(1, 1), scroll_distance=100, scroll_wheel_distance=150 * scale) # Increased scroll speed
+        scroll = ScrollView(size_hint=(1, 1), scroll_distance=100, scroll_wheel_distance=150 * scale)
         self.items_container = BoxLayout(orientation='vertical', size_hint_y=None, spacing=2)
         self.items_container.bind(minimum_height=self.items_container.setter('height'))
         scroll.add_widget(self.items_container)
@@ -1438,7 +1429,6 @@ class PacificaAgendaApp(App):
             widget = AgendaItem(date_text, section_text, item_text, notes_text, idx, self)
             widget.checkbox.active = include_flag
             widget.selected = include_flag
-            # widget.update_background() # update_background is called by _setup_initial_size in AgendaItem constructor
 
             self.items_container.add_widget(widget)
             if include_flag:
@@ -1491,14 +1481,13 @@ class PacificaAgendaApp(App):
 
         copy_btn = StyledButton(text="Copy Text", size_hint=(None, None), width=220, height=75)
         copy_btn.disabled = True
-        self.copy_button = copy_btn # Store reference
+        self.copy_button = copy_btn
         copy_btn.bind(on_release=lambda *_: self._copy_report_to_clipboard())
         top.add_widget(copy_btn)
 
         layout.add_widget(top)
 
         # A container for all generation-related outputs that will take up the remaining space
-        # Make this an instance variable
         self.generation_area = BoxLayout(orientation='vertical', spacing=10 * scale)
         layout.add_widget(self.generation_area)
 
@@ -1620,7 +1609,7 @@ class PacificaAgendaApp(App):
         self.install_model_btn = StyledButton(
             text="Model Settings",
             size_hint=(None, None),
-            width=280,   # was 180
+            width=280,
             height=75
         )
         self.install_model_btn.bind(on_release=lambda *_: self._open_model_install_menu())
@@ -1697,7 +1686,7 @@ class PacificaAgendaApp(App):
             initial_active=self.CONF["debug"],
             callback=self._toggle_debug,
             size_hint=(None, None),
-            width=320, # Wider to fit "Debug Mode Disabled"
+            width=320,
             height=75
         )
         control_debug = BoxLayout(orientation="horizontal", spacing=10 * scale, size_hint_x=0.7)
@@ -1788,7 +1777,7 @@ class PacificaAgendaApp(App):
 
         root.add_widget(grid)
     
-        # NEW: Add a flexible spacer to push content to the top and leave space at the bottom
+        # Add a flexible spacer to push content to the top and leave space at the bottom
         root.add_widget(Widget())
     
         btn_bar = BoxLayout(size_hint_y=None, height=75 * scale, spacing=10 * scale)
@@ -2162,7 +2151,7 @@ class PacificaAgendaApp(App):
         text_input.bind(minimum_height=text_input.setter('height'))
 
         # ScrollView to contain the resizable TextInput
-        scroll_view = ScrollView(scroll_wheel_distance=100)  # Increased scroll speed
+        scroll_view = ScrollView(scroll_wheel_distance=100)
         scroll_view.add_widget(text_input)
         content.add_widget(scroll_view)
 
@@ -2558,7 +2547,7 @@ class PacificaAgendaApp(App):
         root.add_widget(dl_btn_container)
 
         # Available models dropdown + refresh + delete
-        list_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=75*scale, spacing=20*scale)  # spacing +10→20
+        list_bar = BoxLayout(orientation='horizontal', size_hint_y=None, height=75*scale, spacing=20*scale)
         list_bar.add_widget(Label(text="Available Models:", color=[0,0,0,1], size_hint_x=None, width=220*scale, font_size=28*scale))
         self.model_spinner = Spinner(text="Select Model",
                                      values=self.backend.get_available_models(),
