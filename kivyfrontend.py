@@ -2303,6 +2303,7 @@ class PacificaAgendaApp(App):
         self.help_label = Label(
             text="", # Will be populated dynamically
             markup=True,
+            font_size=26 * scale,
             color=[0, 0, 0, 1],
             text_size=(None, None),
             halign="left",
@@ -2322,12 +2323,13 @@ class PacificaAgendaApp(App):
     def _update_help_text(self, *args):
         # This method is called right before the help screen is displayed.
         # It builds the help text with the current spreadsheet header configuration.
+        scale = self.gui_scale_factor
         help_text = (
-            "[size=42][b]Welcome to the Agenda Summary Generator v5.0![/b][/size]\n\n"
+            f"[size={int(42 * scale)}][b]Welcome to the Agenda Summary Generator v5.0![/b][/size]\n\n"
             "This guide will walk you through using the application, from initial setup to generating your first report.\n\n"
             
-            "[size=34][b]Part 1: First-Time Setup & Model Management[/b][/size]\n\n"
-            "[size=30][b]Step 1: Install an AI Model[/b][/size]\n"
+            f"[size={int(34 * scale)}][b]Part 1: First-Time Setup & Model Management[/b][/size]\n\n"
+            f"[size={int(30 * scale)}][b]Step 1: Install an AI Model[/b][/size]\n"
             "Before you can generate reports, you need at least one AI model installed. To begin, navigate to [b]Settings[/b] and click the '[b]Model Settings[/b]' button. This will take you to the 'Install Models' screen.\n\n"
             "You have two ways to add a model:\n\n"
             "1. [b]Install the Recommended Model (Requires Internet)[/b]\n"
@@ -2339,14 +2341,14 @@ class PacificaAgendaApp(App):
             "   • In the large upload area, either [b]click to browse[/b] for a `.gguf` file or [b]drag and drop[/b] the file directly onto the zone.\n"
             "   • The model file will be copied into the application's data folder and become available for use.\n\n"
 
-            "[size=30][b]Step 2: Selecting and Managing Models[/b][/size]\n"
+            f"[size={int(30 * scale)}][b]Step 2: Selecting and Managing Models[/b][/size]\n"
             "• Once installed, your models will appear in the '[b]Available Models[/b]' dropdown list on the 'Install Models' screen.\n"
             "• To use a model for generation, simply [b]select it from the dropdown[/b]. The chosen model will be loaded in the background.\n"
             "• You can install as many models as you like and switch between them at any time.\n"
             "• Use the '[b]Refresh[/b]' button to update the list if you've manually added files, and the '[b]Delete Model[/b]' button to remove the currently selected model from your system.\n\n"
 
-            "[size=34][b]Part 2: Generating a Report[/b][/size]\n\n"
-            "[size=30][b]Step 3: Prepare Your Excel File[/b][/size]\n"
+            f"[size={int(34 * scale)}][b]Part 2: Generating a Report[/b][/size]\n\n"
+            f"[size={int(30 * scale)}][b]Step 3: Prepare Your Excel File[/b][/size]\n"
             "• Your data must be in a Microsoft Excel (.xlsx) file.\n"
             "• If your file has multiple sheets, the app will prompt you to select which one contains your agenda data.\n"
             "• The selected sheet needs specific column headers to find the data. By default, it looks for:\n"
@@ -2357,31 +2359,31 @@ class PacificaAgendaApp(App):
             f"    - \"[b]{self.spreadsheet_headers['include']}[/b]\" to automatically select an item (cell value '[b]Y[/b]' or '[b]Yes[/b]' — case-insensitive)\n"
             "• [b]IMPORTANT[/b]: For the app to correctly identify which rows are agenda items, the value in your 'date' column must start with a number in specifically [date]-[3-letter-month] format (e.g., '01-Jan' or '31-Dec').\n\n"
 
-            "[size=30][b]Step 4: Upload Your File[/b][/size]\n"
+            f"[size={int(30 * scale)}][b]Step 4: Upload Your File[/b][/size]\n"
             "• On the home screen, either [b]drag and drop[/b] your .xlsx file onto the large upload area, or [b]click the area[/b] to open a file browser.\n"
             "• If your Excel file contains multiple sheets, a popup will appear asking you to select which sheet to process.\n\n"
 
-            "[size=30][b]Step 5: Review and Select Items[/b][/size]\n"
+            f"[size={int(30 * scale)}][b]Step 5: Review and Select Items[/b][/size]\n"
             "• After uploading, you'll see a list of all agenda items found in your file.\n"
             "• Items are automatically checked if their '[b]Include[/b]' column is 'Y' or 'Yes' (case-insensitive).\n"
             "• You can manually check or uncheck any item by clicking on it.\n"
             "• Use the '[b]Select All[/b]' and '[b]Deselect All[/b]' buttons for quick changes.\n"
             "• Toggle '[b]Ignore Bracketed Text[/b]' in settings to filter out text in brackets.\n\n"
             
-            "[size=30][b]Step 6: Generate the Summary[/b][/size]\n"
+            f"[size={int(30 * scale)}][b]Step 6: Generate the Summary[/b][/size]\n"
             "• Once you're happy with your selections, click the '[b]Generate[/b]' button.\n"
             "• You will be taken to a new screen where you can see the AI generating the report in real-time.\n"
             "• Time to generate is determined by which model you select and your computer hardware.\n"
             "• Processing may take a long time on slower computers!\n"
             "• The output window and debug console (if enabled) will scroll automatically.\n\n"
 
-            "[size=30][b]Step 7: Save or Copy Your Report[/b][/size]\n"
+            f"[size={int(30 * scale)}][b]Step 7: Save or Copy Your Report[/b][/size]\n"
             "• When the process is finished, the '[b]Save[/b]' and '[b]Copy[/b]' buttons will become active.\n"
             "• A notification sound will play, and the app window will come to the front.\n"
             "• Click '[b]Save[/b]' to save the report as a formatted Microsoft Word (.docx) file. Alternatively, click '[b]Copy[/b]' to copy the entire report text to your clipboard for pasting elsewhere.\n"
             "• After saving, a confirmation dialog will appear with two buttons: '[b]OK[/b]' (left) and '[b]Open File Location[/b]' (right) to quickly reveal the saved file in your file manager.\n\n"
 
-            "[size=34][b]Part 3: Advanced Settings[/b][/size]\n\n"
+            f"[size={int(34 * scale)}][b]Part 3: Advanced Settings[/b][/size]\n\n"
             "The Settings screen provides powerful customization options:\n"
             "• [b]Model Settings[/b]: This button takes you to the model installation and management screen, as described in Part 1.\n"
             "• [b]Spreadsheet Column Headers[/b]: If your Excel file uses different header names (e.g., 'Meeting_Date' instead of 'MEETING DATE'), you can change what the app looks for here. Click each button ('Date', 'Section', etc.) to edit the corresponding header name.\n"
@@ -2391,7 +2393,7 @@ class PacificaAgendaApp(App):
             "• [b]GUI Scale Factor[/b]: If UI elements appear too large or too small on your screen, you can adjust the scale. Enter a number (e.g., `1.0` for default, `1.2` for larger, `0.9` for smaller) and click 'Set Scale'. The UI will immediately rescale. A restart is not required.\n"
             "• [b]Uninstall App[/b]: This provides a quick way to completely remove all application data, including the downloaded model, settings, and logs. [b]Settings deletion is irreversible.[/b]\n\n"
 
-            "[size=34][b]More Information & Source Code[/b][/size]\n\n"
+            f"[size={int(34 * scale)}][b]More Information & Source Code[/b][/size]\n\n"
             "For the full documentation, source code, and latest releases, please visit the GitHub repository:\n"
             "[ref=github_repo][u][color=4682B4]https://github.com/ningkaiyang/PacificaAutoAgendaWriter[/color][/u][/ref]"
         )
