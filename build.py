@@ -145,7 +145,15 @@ def main():
         '--hidden-import', 'lxml._elementpath',
         '--hidden-import', 'diskcache',
         '--hidden-import', 'pyperclip',
+        '--hidden-import', 'webbrowser',
     ])
+
+    # MacOS notifications support - exclude on Windows
+    if sys.platform == 'darwin':
+        pyinstaller_args += [
+            '--hidden-import', 'plyer.platforms.macosx.notification',
+            '--hidden-import', 'pyobjus',
+        ]
     
     # Exclude unused Kivy modules to reduce bundle size and log noise (e.g., from camera/gstreamer).
     pyinstaller_args.extend([

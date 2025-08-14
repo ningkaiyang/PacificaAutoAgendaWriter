@@ -63,6 +63,7 @@ except Exception as e:
 # ---------------------------------------------------------------------------
 import threading
 import traceback
+import webbrowser
 import re
 import time
 from datetime import datetime
@@ -2268,6 +2269,11 @@ class PacificaAgendaApp(App):
         is_installed = current and (current in self.backend.get_available_models())
         self.upload_zone.set_uninstalled_state(not is_installed)
 
+    def _on_ref_press(self, _, ref):
+        """Handle hyperlink clicks in labels."""
+        if ref == "github_repo":
+            webbrowser.open("https://github.com/ningkaiyang/PacificaAutoAgendaWriter")
+
     # ---------------------------------------------------------------- Help & Credits
     def _build_help(self):
         scale = self.gui_scale_factor
@@ -2305,6 +2311,7 @@ class PacificaAgendaApp(App):
         )
         self.help_label.bind(width=lambda inst, width: inst.setter('text_size')(inst, (width - 40, None)))
         self.help_label.bind(texture_size=lambda inst, size: setattr(inst, 'height', size[1]))
+        self.help_label.bind(on_ref_press=self._on_ref_press)
         content.add_widget(self.help_label)
         
         scroll.add_widget(content)
@@ -2316,7 +2323,7 @@ class PacificaAgendaApp(App):
         # This method is called right before the help screen is displayed.
         # It builds the help text with the current spreadsheet header configuration.
         help_text = (
-            "[size=42][b]Welcome to the Agenda Summary Generator v4.0![/b][/size]\n\n"
+            "[size=42][b]Welcome to the Agenda Summary Generator v5.0![/b][/size]\n\n"
             "This guide will walk you through using the application, from initial setup to generating your first report.\n\n"
             
             "[size=34][b]Part 1: First-Time Setup & Model Management[/b][/size]\n\n"
@@ -2382,7 +2389,11 @@ class PacificaAgendaApp(App):
             "• [b]Debug Mode[/b]: Toggling this on will show a detailed debug console on the generation screen, which is useful for troubleshooting. It displays the exact text sent to the AI and performance metrics like generation speed. For developers.\n"
             "• [b]Ignore Bracketed Text[/b]: When enabled, the app will automatically remove any text found inside square brackets `[]` from your spreadsheet data before sending it to the AI.\n"
             "• [b]GUI Scale Factor[/b]: If UI elements appear too large or too small on your screen, you can adjust the scale. Enter a number (e.g., `1.0` for default, `1.2` for larger, `0.9` for smaller) and click 'Set Scale'. The UI will immediately rescale. A restart is not required.\n"
-            "• [b]Uninstall App[/b]: This provides a quick way to completely remove all application data, including the downloaded model, settings, and logs. [b]Settings deletion is irreversible.[/b]"
+            "• [b]Uninstall App[/b]: This provides a quick way to completely remove all application data, including the downloaded model, settings, and logs. [b]Settings deletion is irreversible.[/b]\n\n"
+
+            "[size=34][b]More Information & Source Code[/b][/size]\n\n"
+            "For the full documentation, source code, and latest releases, please visit the GitHub repository:\n"
+            "[ref=github_repo][u][color=4682B4]https://github.com/ningkaiyang/PacificaAutoAgendaWriter[/color][/u][/ref]"
         )
         if hasattr(self, 'help_label'):
             self.help_label.text = help_text
