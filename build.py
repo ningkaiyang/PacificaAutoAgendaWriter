@@ -128,15 +128,10 @@ def main():
         '--hidden-import', 'kivy.graphics.texture',
         '--hidden-import', 'kivy.graphics.vertex_instructions',
         '--hidden-import', 'kivy.properties',
-        # okay so the error says it can't find an image provider
-        # let's explicitly tell pyinstaller to grab them
         '--hidden-import', 'kivy.core.image.img_pil',
         '--hidden-import', 'kivy.core.image.img_sdl2',
-        # let's also grab the audio and text providers just in case
-        # the app uses sound and custom fonts, so these are likely needed
         '--hidden-import', 'kivy.core.audio.audio_sdl2',
         '--hidden-import', 'kivy.core.text.text_sdl2',
-        # the new error says it can't find a window provider, so let's add that too
         '--hidden-import', 'kivy.core.window.window_sdl2',
         '--hidden-import', 'plyer.platforms.win.notification',
         '--hidden-import', 'plyer.platforms.win.filechooser',
@@ -147,10 +142,9 @@ def main():
         '--hidden-import', 'docx',
         '--hidden-import', 'openpyxl',
         '--hidden-import', 'llama_cpp',
-        # python-docx needs lxml, and pyinstaller can miss this part
         '--hidden-import', 'lxml._elementpath',
-        # llama-cpp-python uses diskcache, let's make sure it's included
         '--hidden-import', 'diskcache',
+        '--hidden-import', 'pyperclip',
     ])
     
     # okay let's exclude modules we know we don't need

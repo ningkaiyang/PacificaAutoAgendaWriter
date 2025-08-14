@@ -22,6 +22,45 @@ import os
 import shutil
 import subprocess
 import sys
+# --- Clipboard crash workaround (Windows) -----------------------------------
+# Some Windows installations fall back to Tkinter for clipboard; if the Tk
+# provider is not fully initialised, any TextInput copy (Ctrl+C) crashes.
+# We patch Clipboard.copy with a safer version that tries the default, then
+# falls back to pyperclip or a one-shot hidden Tkinter root.
+try:
+    from kivy.core.clipboard import Clipboard as _KivyClipboard
+
+    _orig_copy_fn = _KivyClipboard.copy
+
+    def _safe_clipboard_copy(text: str):
+        try:
+            _orig_copy_fn(text)                    # Try normal Kivy provider
+            return
+        except Exception as first_exc:
+            try:
+                import pyperclip                  # 1st fallback
+                pyperclip.copy(text)
+                return
+            except Exception:
+                pass
+            try:
+                import tkinter as _tk             # 2nd fallback (hidden root)
+                _r = _tk.Tk()
+                _r.withdraw()
+                _r.clipboard_clear()
+                _r.clipboard_append(text)
+                _r.update()                       # keep clipboard after quit
+                _r.destroy()
+                return
+            except Exception:
+                # Final fallback – give up but prevent hard crash
+                print(f"[clipboard] copy failed: {first_exc}", file=sys.stderr)
+
+    # Monkey-patch the singleton provider instance
+    _KivyClipboard.copy = _safe_clipboard_copy
+except Exception as e:
+    print(f"[clipboard] Could not patch clipboard provider: {e}", file=sys.stderr)
+# ---------------------------------------------------------------------------
 import threading
 import traceback
 import re

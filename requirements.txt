@@ -10,6 +10,9 @@ pandas==2.3.1
 openpyxl==3.1.5 # For reading .xlsx files
 numpy==2.3.1    # Core dependency for pandas
 
+# Clipboard fallback (optional but recommended for Windows)
+pyperclip
+
 # LLM and AI
 # LLM and AI
 # IMPORTANT FOR WINDOWS USERS:

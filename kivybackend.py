@@ -63,10 +63,12 @@ def suppress_stderr():
 class TokenStreamer:
     """Collects streamed tokens, prints all tokens (including thinking tags) for debugging,
     and tracks speed."""
-    def __init__(self, debug_callback: Callable[[str], None] | None = None):
+    def __init__(self, debug_callback: Callable[[str], None] | None = None,
+                 gui_callback: Callable[[str], None] | None = None):
         self._start = time.perf_counter()
         self._tok = 0
         self.debug_callback = debug_callback
+        self.gui_callback = gui_callback   # NEW
 
     def __call__(self, chunk: dict):
         tok = chunk["choices"][0]["delta"].get("content", "")
@@ -82,18 +84,17 @@ class TokenStreamer:
     def done(self):
         dt = time.perf_counter() - self._start
         if dt:
-            stats = []
-            stats.append(f"\nAverage speed: {self._tok/dt:.2f} tok/s")
-            stats.append(f"Tokens: {self._tok}")
-            stats.append(f"Elapsed Time: {dt:.2f}s")
+            stats = (f"\nAverage speed: {self._tok/dt:.2f} tok/s\n"
+                     f"Tokens: {self._tok}\nElapsed Time: {dt:.2f}s")
             # Peak memory usage reporting is disabled as it's not cross-platform.
             
-            stats_str = "\n".join(stats)
-            
             if self.debug_callback:
-                self.debug_callback(stats_str + "\n")
+                self.debug_callback(stats + "\n")
             else:
-                print(stats_str)
+                print(stats)
+            # Always push stats to GUI if callback provided
+            if self.gui_callback:
+                self.gui_callback(stats + "\n")
 
 
 class GUITokenFilter:
@@ -540,7 +541,8 @@ class AgendaBackend:
                 )
                 
                 # Collect summarized items from Pass 1
-                think_streamer = TokenStreamer(debug_callback=debug_cb)
+                think_streamer = TokenStreamer(debug_callback=debug_cb,
+                                               gui_callback=token_cb)  # patched
                 raw_summary = ""
                 for chunk in pass1_stream:
                     if cancel_event and cancel_event.is_set():
@@ -589,7 +591,8 @@ class AgendaBackend:
 
                 # This is the stream we will show to the user
                 # Stream to console (unfiltered) and GUI (raw)
-                streamer = TokenStreamer(debug_callback=debug_cb)
+                streamer = TokenStreamer(debug_callback=debug_cb,
+                                         gui_callback=token_cb)  # patched
                 
                 for chunk in pass2_stream:
                     if cancel_event and cancel_event.is_set():
