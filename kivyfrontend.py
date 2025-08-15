@@ -22,44 +22,103 @@ import os
 import shutil
 import subprocess
 import sys
-# --- Clipboard crash workaround (Windows) -----------------------------------
-# Some Windows installations fall back to Tkinter for clipboard; if the Tk
-# provider is not fully initialised, any TextInput copy (Ctrl+C) crashes.
-# We patch Clipboard.copy with a safer version that tries the default, then
-# falls back to pyperclip or a one-shot hidden Tkinter root.
+# --- Clipboard crash workaround (Windows & fallback) -----------------------------------
+# Some Windows systems fail to initialise a clipboard provider, leaving
+# `kivy.core.clipboard.Clipboard` as `None`.  When Kivy's TextInput invokes
+# `Clipboard.copy`, this results in `AttributeError: 'NoneType' object has no attribute 'copy'`.
+#
+# The logic below guarantees that **some** `Clipboard.copy` callable always
+# exists:
+#   1. If Kivy supplied a provider, we wrap its `.copy()` in a safe wrapper
+#      that falls back to pyperclip / Tkinter on error.
+#   2. If the provider is missing (`Clipboard is None`), we install a
+#      lightweight `_DummyClipboard` instance implementing `copy`/`paste`
+#      using the same fallbacks.
+#   3. We also update `kivy.uix.textinput.Clipboard` so that any earlier
+#      imports in that module point to our patched/dummy object.
+#
+# The fallback hierarchy for actually setting the clipboard data is:
+#   a. Native Kivy provider (if available and works)
+#   b. `pyperclip` (if installed)
+#   c. Hidden Tkinter root (last-ditch, still Windows-friendly)
+
 try:
-    from kivy.core.clipboard import Clipboard as _KivyClipboard
+    # Access the clipboard module directly.
+    from kivy.core import clipboard as _clipboard_mod
+    # Preserve whatever object Kivy attempted to assign (may be None).
+    _orig_clipboard_obj = getattr(_clipboard_mod, "Clipboard", None)
 
-    _orig_copy_fn = _KivyClipboard.copy
-
-    def _safe_clipboard_copy(text: str):
+    # ------------------------------------------------------------------
+    # Fallback helpers
+    # ------------------------------------------------------------------
+    def _fallback_copy_fn(text: str):
+        """Try pyperclip, then Tkinter, else silently ignore."""
+        # 1st fallback: pyperclip
         try:
-            _orig_copy_fn(text)                    # Try normal Kivy provider
+            import pyperclip
+            pyperclip.copy(text)
             return
-        except Exception as first_exc:
-            try:
-                import pyperclip                  # 1st fallback
-                pyperclip.copy(text)
-                return
-            except Exception:
-                pass
-            try:
-                import tkinter as _tk             # 2nd fallback (hidden root)
-                _r = _tk.Tk()
-                _r.withdraw()
-                _r.clipboard_clear()
-                _r.clipboard_append(text)
-                _r.update()                       # keep clipboard after quit
-                _r.destroy()
-                return
-            except Exception:
-                # Final fallback – give up but prevent hard crash
-                print(f"[clipboard] copy failed: {first_exc}", file=sys.stderr)
+        except Exception:
+            pass
+        # 2nd fallback: hidden Tkinter root
+        try:
+            import tkinter as _tk
+            _r = _tk.Tk()
+            _r.withdraw()
+            _r.clipboard_clear()
+            _r.clipboard_append(text)
+            _r.update()     # keep clipboard after quit
+            _r.destroy()
+            return
+        except Exception:
+            pass
+        # Final fallback – give up but prevent hard crash
+        print("[clipboard] All clipboard providers failed (text not copied).", file=sys.stderr)
 
-    # Monkey-patch the singleton provider instance
-    _KivyClipboard.copy = _safe_clipboard_copy
+    class _DummyClipboard:
+        """Minimal clipboard provider with safe fallbacks."""
+        def copy(self, text: str):
+            _fallback_copy_fn(text)
+
+        def paste(self):
+            try:
+                import pyperclip
+                return pyperclip.paste()
+            except Exception:
+                return ""
+
+    # ------------------------------------------------------------------
+    # Decide strategy based on whether a provider exists
+    # ------------------------------------------------------------------
+    if _orig_clipboard_obj is None:
+        # Provider missing – install dummy instance
+        _clipboard_mod.Clipboard = _DummyClipboard()
+    else:
+        # Provider exists – wrap its copy method
+        _orig_copy_fn = _orig_clipboard_obj.copy
+
+        def _safe_copy(text: str):
+            try:
+                _orig_copy_fn(text)  # Attempt native copy first
+            except Exception as first_exc:
+                print(f"[clipboard] Native provider failed: {first_exc}", file=sys.stderr)
+                _fallback_copy_fn(text)
+
+        # Monkey-patch the provider’s copy
+        _orig_clipboard_obj.copy = _safe_copy
+
+    # ------------------------------------------------------------------
+    # Ensure kivy.uix.textinput uses the same patched object
+    # ------------------------------------------------------------------
+    try:
+        import kivy.uix.textinput as _ti_mod
+        _ti_mod.Clipboard = _clipboard_mod.Clipboard
+    except Exception:
+        # Silently ignore if TextInput not imported yet
+        pass
+
 except Exception as e:
-    print(f"[clipboard] Could not patch clipboard provider: {e}", file=sys.stderr)
+    print(f"[clipboard] Clipboard patch failed: {e}", file=sys.stderr)
 # ---------------------------------------------------------------------------
 import threading
 import traceback
